@@ -1,0 +1,68 @@
+[package]
+name = "thugsred-smsgateway"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "High-performance, self-hosted Rust SMS gateway for Linux and Raspberry Pi featuring GSM/PDU messaging, REST API, web dashboard, persistent message storage and configurable service integrations."
+license = "MIT"
+homepage = "https://thugs.red"
+repository = "https://github.com/kawaiipantsu/THUGSred-smsGateway"
+authors = ["THUGSred"]
+readme = "README.md"
+keywords = ["sms", "gsm", "modem", "gateway", "pdu"]
+categories = ["command-line-utilities", "network-programming"]
+
+[lib]
+name = "thugsred_smsgateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "thugsred-smsgateway"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+arc-swap = "1"
+async-trait = "0.1"
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "matched-path", "query", "tokio"] }
+base64 = "0.22"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+chrono-tz = { version = "0.10", default-features = false, features = ["std"] }
+clap = { version = "4", features = ["derive", "env"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
+hex = "0.4"
+hmac = "0.12"
+include_dir = "0.7"
+ipnet = "2"
+nix = { version = "0.29", features = ["fs", "term", "user"] }
+percent-encoding = "2"
+regex = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sd-notify = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sqlx = { version = "0.8", default-features = false, features = ["any", "mysql", "runtime-tokio", "sqlite", "tls-rustls-ring-webpki"] }
+thiserror = "2"
+tokio = { version = "1", features = ["fs", "io-std", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
+tokio-serial = { version = "5.4", default-features = false }
+tokio-stream = { version = "0.1", features = ["sync"] }
+toml = "0.8"
+tower = { version = "0.5", features = ["timeout", "util"] }
+tower-http = { version = "0.6", features = ["limit", "timeout"] }
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = true
+
+[profile.dev]
+debug = "line-tables-only"

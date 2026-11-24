@@ -1,0 +1,65 @@
+# Build output
+/target/
+/bin/
+/dist/
+
+# Runtime data (never commit deployment data)
+/recordings/
+/backups/
+/logs/
+/data/
+/runtime/
+/spool/
+/attachments/
+/secrets/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+credentials.json
+secrets.json
+secrets.toml
+token.txt
+github-token.txt
+
+# Databases
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Logs, pid files, sockets
+*.log
+*.log.*
+*.pid
+*.sock
+
+# Deployment configuration (the *.example templates are tracked)
+smsgateway.conf
+integrations.conf
+sim.conf
+addressbook.conf
+anonymous.conf
+smsgateway.env
+
+# Audio recordings
+*.wav
+*.mp3
+*.ogg
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
