@@ -44,6 +44,8 @@ fn main() {
         std::env::var("TARGET").unwrap_or_default()
     );
     println!("cargo:rerun-if-changed=build.rs");
+    // HEAD names the branch; the reflog changes with every commit.
     println!("cargo:rerun-if-changed=.git/HEAD");
+    println!("cargo:rerun-if-changed=.git/logs/HEAD");
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
 }
