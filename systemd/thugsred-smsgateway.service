@@ -1,0 +1,69 @@
+[Unit]
+Description=THUGSred SMS Gateway
+Documentation=https://github.com/kawaiipantsu/THUGSred-smsGateway
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=thugsred-smsgateway
+Group=thugsred-smsgateway
+# dialout: serial modem access. audio: optional call recording through ALSA.
+SupplementaryGroups=dialout audio
+
+WorkingDirectory=/opt/THUGSred-smsGateway
+# Optional secrets referenced from the configuration as ${NAME}.
+EnvironmentFile=-/etc/thugsred/smsgateway.env
+
+ExecStart=/opt/THUGSred-smsGateway/bin/thugsred-smsgateway run --config /etc/thugsred/smsgateway.conf
+ExecReload=/bin/kill -HUP $MAINPID
+
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=45
+# The daemon reports liveness while its database is reachable.
+WatchdogSec=120
+
+StateDirectory=thugsred-smsgateway
+StateDirectoryMode=0750
+LogsDirectory=thugsred-smsgateway
+LogsDirectoryMode=0750
+RuntimeDirectory=thugsred-smsgateway
+RuntimeDirectoryMode=0750
+
+# Sandboxing. PrivateDevices is deliberately not set: the modem is a device.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+ReadWritePaths=-/opt/THUGSred-smsGateway/recordings
+ReadWritePaths=-/opt/THUGSred-smsGateway/backups
+
+UMask=0027
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=thugsred-smsgateway
+
+[Install]
+WantedBy=multi-user.target

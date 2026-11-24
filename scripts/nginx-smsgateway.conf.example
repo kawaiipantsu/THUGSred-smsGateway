@@ -1,0 +1,48 @@
+# Example nginx reverse proxy for THUGSred-smsGateway.
+#
+# The gateway speaks plain HTTP only; terminate TLS here or on an upstream
+# proxy. Matching gateway settings in /etc/thugsred/smsgateway.conf:
+#
+#   [api]
+#   bind = "127.0.0.1"
+#   port = 8080
+#   trusted_proxies = ["127.0.0.1"]     # so allowed_cidrs sees the real client
+#
+# Never publish an unauthenticated gateway to the internet: keep `allow`
+# rules (or authentication) in place.
+
+server {
+    listen 80;
+    server_name smsgateway.example.invalid;
+
+    # Restrict to trusted networks.
+    allow 127.0.0.1;
+    allow 10.0.0.0/8;
+    allow 172.16.0.0/12;
+    allow 192.168.0.0/16;
+    deny all;
+
+    client_max_body_size 256k;
+
+    location / {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        # The gateway compares Origin with Host for CSRF protection.
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+    }
+
+    # Live event stream (Server-Sent Events): no buffering, long timeout.
+    location /api/v1/events/stream {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 1h;
+    }
+}

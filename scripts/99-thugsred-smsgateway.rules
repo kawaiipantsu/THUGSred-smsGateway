@@ -1,0 +1,14 @@
+# Optional udev rules for THUGSred-smsGateway.
+# Install: sudo cp scripts/99-thugsred-smsgateway.rules /etc/udev/rules.d/
+#          sudo udevadm control --reload && sudo udevadm trigger
+#
+# Tells ModemManager to leave common USB-to-UART bridges alone so that it does
+# not probe (and disturb) the gateway's modem. Remove the lines for adapters
+# that ModemManager should keep managing on this machine.
+
+# Silicon Labs CP210x (Waveshare GSM/GPRS/GNSS HAT in USB mode)
+ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", ENV{ID_MM_DEVICE_IGNORE}="1"
+# QinHeng CH340 / CH341
+ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="7523", ENV{ID_MM_DEVICE_IGNORE}="1"
+# FTDI FT232
+ATTRS{idVendor}=="0403", ATTRS{idProduct}=="6001", ENV{ID_MM_DEVICE_IGNORE}="1"

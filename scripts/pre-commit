@@ -1,0 +1,15 @@
+#!/bin/sh
+# Optional Git pre-commit hook: blocks commits that contain secrets or
+# deployment files. Enable with:  make hooks
+set -eu
+if command -v gitleaks >/dev/null 2>&1; then
+    gitleaks protect --staged --redact --no-banner || { echo "gitleaks found a possible secret; commit aborted" >&2; exit 1; }
+else
+    sh "$(git rev-parse --show-toplevel)/scripts/secret-scan.sh" --staged || { echo "commit aborted" >&2; exit 1; }
+fi
+for f in $(git diff --cached --name-only --diff-filter=AM); do
+    case "$(basename "$f")" in
+        *.db|*.sqlite|*.sqlite3|*.wav|*.pem|*.key|.env|smsgateway.conf|sim.conf|integrations.conf|addressbook.conf|anonymous.conf|smsgateway.env)
+            echo "refusing to commit deployment file: $f" >&2; exit 1 ;;
+    esac
+done
