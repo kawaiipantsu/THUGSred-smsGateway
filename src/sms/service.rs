@@ -480,6 +480,8 @@ impl SmsService {
             .log_message_content
             .then(|| m.body.clone())
             .flatten();
+        // Optional values are logged as plain strings ("-" when absent).
+        let opt = |v: &Option<String>| v.clone().unwrap_or_else(|| "-".into());
         tracing::info!(
             target: "messages",
             action,
@@ -487,14 +489,14 @@ impl SmsService {
             direction = %m.direction,
             message_type = %m.message_type,
             status = %m.status,
-            modem = ?m.modem_id,
-            sender = ?num(&m.sender),
-            recipient = ?num(&m.recipient),
+            modem = %opt(&m.modem_id),
+            sender = %opt(&num(&m.sender)),
+            recipient = %opt(&num(&m.recipient)),
             parts = m.parts,
-            encoding = ?m.encoding,
-            correlation_id = ?m.correlation_id,
-            error = ?m.error,
-            body = ?body,
+            encoding = %opt(&m.encoding),
+            correlation_id = %opt(&m.correlation_id),
+            error = %opt(&m.error),
+            body = %opt(&body),
             "message {action}"
         );
     }

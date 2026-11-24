@@ -258,7 +258,15 @@ pub async fn audit(
     detail: Option<&str>,
 ) {
     let actor = ctx.client_ip.to_string();
-    tracing::info!(target: "audit", actor = %actor, action, target = ?target, detail = ?detail, request_id = %ctx.request_id, "audit");
+    tracing::info!(
+        target: "audit",
+        actor = %actor,
+        action,
+        target = target.unwrap_or("-"),
+        detail = detail.unwrap_or("-"),
+        request_id = %ctx.request_id,
+        "audit"
+    );
     if let Err(e) = state
         .gw
         .db
