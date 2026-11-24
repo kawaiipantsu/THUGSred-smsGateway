@@ -1,0 +1,23 @@
+# SIMCom LTE modules: SIM7600 series, A7600/A7670 series, SIM7000/SIM7070.
+name = "simcom-lte"
+description = "SIMCom SIM7600 / A76xx / SIM70xx (LTE)"
+manufacturers = ["SIMCOM", "INCORPORATED"]
+models = ["SIM7600", "SIM7500", "A7600", "A7670", "A7672", "SIM7000", "SIM7070", "SIM7080"]
+init_commands = []
+cnmi = ["2,1,0,1,0", "2,1,0,0,0"]
+iccid_commands = ["AT+CICCID", "AT+CCID"]
+network_technologies = ["GSM", "UMTS", "LTE"]
+voice = "unverified"
+audio_interfaces = ["USB audio / PCM (firmware dependent, AT+CPCMREG)"]
+power_on_hint = "Hold the PWRKEY button until the status LED lights up, or check the module's power supply."
+
+[gnss]
+kind = "simcom_cgps"
+test_command = "AT+CGPS=?"
+
+# preferred_network setting to the command that selects it
+[network_modes]
+auto = "AT+CNMP=2"
+2g = "AT+CNMP=13"
+3g = "AT+CNMP=14"
+4g = "AT+CNMP=38"

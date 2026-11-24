@@ -1,0 +1,19 @@
+# SIMCom 2G modules: SIM800 series, SIM868, SIM808, SIM900.
+# Used on Waveshare GSM/GPRS/GNSS HATs (SIM868) and many GSM breakout boards.
+name = "simcom-2g"
+description = "SIMCom SIM800 / SIM868 / SIM808 / SIM900 (GSM/GPRS)"
+manufacturers = ["SIMCOM"]
+models = ["SIM800", "SIM868", "SIM808", "SIM900"]
+init_commands = []
+cnmi = ["2,1,0,1,0", "2,1,0,0,0"]
+iccid_commands = ["AT+CCID"]
+network_technologies = ["GSM", "GPRS"]
+voice = "supported"
+audio_interfaces = ["analog (headset jack / MIC and SPK pins)"]
+mms_test_command = "AT+CMMSINIT=?"
+bluetooth_test_command = "AT+BTPOWER=?"
+power_on_hint = "The module does not power on by itself: hold the PWRKEY button for about two seconds until the NET LED starts blinking. On Waveshare HATs used over USB, the UART selection jumpers must be in the USB position."
+
+[gnss]
+kind = "simcom_cgns"
+test_command = "AT+CGNSPWR=?"

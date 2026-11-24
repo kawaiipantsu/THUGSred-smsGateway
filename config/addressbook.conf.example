@@ -1,0 +1,17 @@
+# THUGSred-smsGateway - address book
+# Install as /etc/thugsred/addressbook.conf.
+#
+# Known numbers and the names to show for them in the dashboard, the API
+# (sender_name / recipient_name) and integration messages
+# ({{message.sender_display}} renders as "Name (+number)").
+# National and international notations of the same number both match.
+
+[contacts]
+"+4500000000" = "Example Person"
+"+4500000001" = "Monitoring system"
+"ExampleService" = "Example service (alphanumeric sender)"
+
+# Alternative notation:
+# [[contact]]
+# name = "Example Person"
+# number = "+4500000000"

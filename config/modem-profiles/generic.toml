@@ -1,0 +1,13 @@
+# Generic 3GPP TS 27.005 / 27.007 modem. Used when no specific profile matches.
+name = "generic"
+description = "Generic AT-command modem (3GPP TS 27.005/27.007)"
+manufacturers = []
+models = []
+init_commands = []
+# +CNMI settings tried in order until the modem accepts one.
+cnmi = ["2,1,0,1,0", "2,1,0,0,0", "1,1,0,0,0"]
+iccid_commands = ["AT+CCID", "AT+ICCID", "AT+QCCID"]
+network_technologies = []
+voice = "unknown"
+audio_interfaces = []
+power_on_hint = "Check that the modem is powered and that the serial device and baud rate are correct."

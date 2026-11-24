@@ -1,0 +1,18 @@
+# THUGSred-smsGateway - numbers that are always anonymised
+# Install as /etc/thugsred/anonymous.conf with mode 0640.
+#
+# Numbers listed here are never disclosed to integrations (webhooks, chat
+# services, syslog ...) or written to log files, even when an integration has
+# no anonymisation configured. Their address book names are withheld too.
+# The gateway's own database, API and dashboard keep the real numbers.
+
+numbers = [
+    # "+4500000000",                  # exact number
+    # "+4599*",                       # every number with this prefix
+]
+
+# Text shown in place of an anonymised number.
+label = "Anonymous"
+
+# Also withhold the message text of these numbers from integrations.
+redact_body = false

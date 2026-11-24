@@ -1,0 +1,57 @@
+# THUGSred-smsGateway - SIM configuration
+# Install as /etc/thugsred/sim.conf with mode 0640 (it may contain a PIN).
+#
+# mobile_number is descriptive metadata shown in the dashboard and used to
+# pick a SIM with the `from` field. It does NOT change the number recipients
+# see; that is always decided by the mobile network.
+
+[sim]
+name = "Primary SMS Gateway"
+owner = "THUGSred"
+description = "Primary cellular gateway SIM"
+mobile_number = "+4500000000"
+country_code = "DK"
+carrier = ""
+pin = ""                              # or "${file:/etc/thugsred/secrets/sim-pin}"
+pin_enabled = false
+pin_max_attempts = 1                  # 1 or 2; a rejected PIN is never retried automatically
+smsc = ""                             # empty keeps the service centre stored on the SIM
+iccid = ""                            # binds this profile to a SIM regardless of the modem it sits in
+imsi = ""
+
+[network]
+selection = "automatic"               # automatic | manual
+operator_code = ""                    # MCC+MNC for manual selection, e.g. "23801"
+roaming_enabled = false               # false: nothing is sent while the SIM is roaming
+apn = ""
+username = ""
+password = ""
+
+[identity]
+manufacturer = ""
+model = ""
+asset_id = ""
+location = ""
+notes = ""
+
+[limits]                              # SMS segments; 0 = unlimited
+monthly_sms_limit = 0
+daily_sms_limit = 0
+
+# ---------------------------------------------------------------------------
+# Several SIMs: use [[sims]] entries instead of the sections above and refer
+# to them from [[modems]] in smsgateway.conf (sim = "sim-1").
+#
+# [[sims]]
+# id = "sim-1"
+# name = "Gateway line 1"
+# mobile_number = "+4500000001"
+# [sims.network]
+# roaming_enabled = false
+# [sims.limits]
+# daily_sms_limit = 200
+#
+# [[sims]]
+# id = "sim-2"
+# name = "Gateway line 2"
+# mobile_number = "+4500000002"

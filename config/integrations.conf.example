@@ -1,0 +1,201 @@
+# THUGSred-smsGateway - integrations, routing and automation
+# Install as /etc/thugsred/integrations.conf.
+#
+# Nothing is forwarded anywhere unless an integration has enabled = true.
+# Any number of integrations may exist, including several of the same type
+# (for example three Discord webhooks); one event is delivered to every
+# enabled integration that subscribes to it and whose filter matches.
+#
+# Events: sms.received sms.queued sms.sent sms.delivered sms.failed
+#   sms.multipart_completed sms.binary_received sms.service_received
+#   mms.notification mms.received ussd.response call.incoming call.missed
+#   call.ended call.recorded modem.connected modem.disconnected modem.error
+#   modem.signal_changed sim.ready sim.locked network.registered network.lost
+#   gnss.fix gateway.started gateway.stopped gateway.error
+#   gateway.config_reloaded            ("*" and "sms.*" style patterns work)
+#
+# Templates use {{path}} placeholders, e.g. {{message.sender}},
+# {{message.sender_display}} (address book name + number), {{message.body}},
+# {{event.type}}, {{event.timestamp}}, {{gateway.instance_name}}.
+# Values are escaped for the destination automatically.
+#
+# Options available on every integration:
+#   events = [...]                subscriptions
+#   anonymize = true              replace all telephone numbers and names
+#   include_message_body = false  replace message text by "[redacted]"
+#   timeout_seconds, verify_tls, rate_limit_per_minute (0 = unlimited)
+#   max_attempts, retry_initial_seconds, retry_max_seconds (0 = global value)
+#   [integration.filter]          see the filter example below
+# Numbers listed in anonymous.conf are always anonymised, whatever is set here.
+
+[[integration]]
+name = "primary-webhook"
+type = "webhook"
+enabled = false
+events = ["sms.received", "sms.delivered"]
+url = "https://example.invalid/sms/events"
+method = "POST"
+content_type = "application/json"
+timeout_seconds = 10
+verify_tls = true
+max_attempts = 5
+include_raw_pdu = false
+sign_payload = true                   # X-THUGSred-Signature: sha256=HMAC(secret, "<timestamp>.<body>")
+signing_secret = "${SMS_WEBHOOK_SECRET}"
+
+[integration.headers]
+X-Gateway = "THUGSred-smsGateway"
+
+# GET webhooks put message data into the URL, where proxies, access logs and
+# browser histories may record it. Prefer POST where possible.
+[[integration]]
+name = "legacy-get-webhook"
+type = "webhook"
+enabled = false
+events = ["sms.received"]
+method = "GET"
+url = "https://example.invalid/receive"
+timeout_seconds = 10
+
+[integration.query]
+sender = "{{message.sender}}"
+message = "{{message.body}}"
+timestamp = "{{event.timestamp}}"
+
+[[integration]]
+name = "discord-sms"
+type = "discord"
+enabled = false
+events = ["sms.received"]
+webhook_url = "${DISCORD_WEBHOOK_URL}"
+username = "THUGSred SMS Gateway"
+template = "SMS from {{message.sender_display}}: {{message.body}}"
+
+# A second Discord webhook that only fires for one sender and never shows
+# telephone numbers.
+[[integration]]
+name = "discord-alerts"
+type = "discord"
+enabled = false
+events = ["sms.received", "call.missed"]
+webhook_url = "${DISCORD_ALERTS_WEBHOOK_URL}"
+anonymize = true
+
+[integration.filter]
+sender_allowlist = ["+4500000000"]    # exact numbers, names, or prefixes such as "+45*"
+# sender_blocklist = []
+# recipient_allowlist = []            # the gateway number that received the message
+# recipient_blocklist = []
+# sender_regex = ""
+# message_regex = "(?i)(alert|warning)"
+# message_contains = ["code"]
+# directions = ["inbound"]
+# message_types = ["sms"]             # sms flash binary service mms_notification wap_push
+# message_classes = []
+# application_ports = []
+# encodings = []
+# instance_ids = []
+# modem_ids = ["modem-1"]
+# sim_ids = []
+# delivery_statuses = []
+
+[[integration]]
+name = "slack-alerts"
+type = "slack"
+enabled = false
+events = ["sms.received", "modem.disconnected"]
+webhook_url = "${SLACK_WEBHOOK_URL}"
+
+# Microsoft Teams: URL of a Workflows "When a Teams webhook request is
+# received" flow (the successor of Office 365 connectors).
+[[integration]]
+name = "teams-alerts"
+type = "teams"
+enabled = false
+events = ["sms.received", "gateway.error"]
+webhook_url = "${TEAMS_WORKFLOW_URL}"
+
+[[integration]]
+name = "telegram-sms"
+type = "telegram"
+enabled = false
+events = ["sms.received"]
+bot_token = "${TELEGRAM_BOT_TOKEN}"
+chat_id = "${TELEGRAM_CHAT_ID}"
+
+[[integration]]
+name = "ntfy-phone"
+type = "ntfy"
+enabled = false
+events = ["sms.received", "call.missed"]
+url = "https://ntfy.example.invalid"
+topic = "sms-gateway"
+token = "${NTFY_TOKEN}"
+priority = 4
+include_message_body = false
+
+[[integration]]
+name = "gotify"
+type = "gotify"
+enabled = false
+events = ["modem.*", "gateway.error"]
+url = "https://gotify.example.invalid"
+token = "${GOTIFY_APP_TOKEN}"
+
+[[integration]]
+name = "syslog"
+type = "syslog"
+enabled = false
+events = ["*"]
+server = "192.0.2.10:514"             # UDP, RFC 5424
+facility = "local0"
+anonymize = true
+include_message_body = false
+
+# ---------------------------------------------------------------------------
+# Routing rules (optional). Evaluated in order. If at least one rule matches
+# an event, only the destinations of the matching rules receive it; if no rule
+# matches, every subscribed integration does. An integration's own `events`
+# and filter always apply as well. See docs/INTEGRATIONS.md.
+
+# [[routing.rule]]
+# name = "infrastructure-alerts"
+# enabled = true
+# events = ["sms.received"]
+# sender_allowlist = ["ExampleService"]
+# message_regex = "(?i)(alert|warning|critical)"
+# destinations = ["discord-sms", "teams-alerts"]
+#
+# [[routing.rule]]
+# name = "private-messages"
+# enabled = true
+# events = ["sms.received"]
+# sender_allowlist = ["+4500000000"]
+# destinations = []
+# stop_processing = true
+
+# ---------------------------------------------------------------------------
+# Automation (optional, opt-in): automatic replies and SMS forwarding.
+# These send SMS and can cost money. Replies require a sender allowlist or
+# regex, are never sent to alphanumeric senders, short codes or the gateway's
+# own numbers, and are limited by cooldown_seconds and max_per_hour.
+
+# [[automation.rule]]
+# name = "status-reply"
+# enabled = false
+# action = "reply"
+# sender_allowlist = ["+4500000000"]
+# message_contains = ["status"]
+# template = "{{gateway.instance_name}} is running."
+# cooldown_seconds = 3600
+# max_per_hour = 10
+#
+# [[automation.rule]]
+# name = "forward-alerts"
+# enabled = false
+# action = "forward"
+# message_regex = "(?i)alert"
+# to = ["+4500000000"]
+# template = "FWD {{message.sender}}: {{message.body}}"
+# cooldown_seconds = 0
+# max_per_hour = 20

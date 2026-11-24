@@ -1,0 +1,215 @@
+# THUGSred-smsGateway - main configuration
+# Install as /etc/thugsred/smsgateway.conf (TOML syntax).
+#
+# Every setting is optional; the values shown are the defaults.
+# Reference: docs/CONFIGURATION.md        Validate: thugsred-smsgateway check-config
+#
+# Overrides:
+#   environment   THUGSRED_SMSGW__SECTION__FIELD=value   (e.g. THUGSRED_SMSGW__API__PORT=9090)
+#   command line  --set section.field=value
+# Secrets can be referenced instead of written here:
+#   "${ENV_VAR}"  or  "${file:/etc/thugsred/secrets/name}"
+#
+# Reload with `systemctl reload thugsred-smsgateway` (SIGHUP). Settings marked
+# [restart] need a restart; everything else applies on reload.
+
+config_version = 1
+
+[general]
+instance_name = "THUGSred SMS Gateway"
+instance_id = "gateway-01"            # [restart] letters, digits, - _ .
+timezone = "UTC"                      # IANA name; defines day/month for SMS quotas
+log_level = "info"                    # trace | debug | info | warn | error
+shutdown_timeout_seconds = 30
+
+[paths]                               # [restart] all paths must be absolute
+home = "/opt/THUGSred-smsGateway"
+data = "/var/lib/thugsred-smsgateway"
+runtime = "/run/thugsred-smsgateway"
+recordings = "/opt/THUGSred-smsGateway/recordings"
+attachments = "/var/lib/thugsred-smsgateway/attachments"
+backups = "/opt/THUGSred-smsGateway/backups"
+modem_profiles = "/etc/thugsred/modem-profiles"
+sim_config = "/etc/thugsred/sim.conf"
+addressbook = "/etc/thugsred/addressbook.conf"
+anonymous = "/etc/thugsred/anonymous.conf"
+
+# Settings for the modem. With several modems this table holds the defaults
+# and each [[modems]] entry (see the end of this file) overrides them.
+# Changes are applied by reconnecting the affected modem.
+[modem]
+enabled = true
+profile = "auto"                      # auto | generic | simcom-2g | simcom-lte | quectel | <custom>
+device = "/dev/ttyS0"                 # Raspberry Pi GPIO UART; USB adapters: /dev/ttyUSB0 or /dev/serial/by-path/...
+baud_rate = 115200
+data_bits = 8
+stop_bits = 1
+parity = "none"                       # none | even | odd
+flow_control = "none"                 # none | hardware | software
+command_timeout_seconds = 10
+message_timeout_seconds = 60          # time allowed for the network to accept an SMS
+poll_interval_seconds = 15            # how often stored messages are fetched as a safety net
+healthcheck_interval_seconds = 30
+reconnect_delay_seconds = 5           # first retry delay; doubles up to the maximum
+max_reconnect_delay_seconds = 300
+auto_reconnect = true
+auto_detect_capabilities = true
+preferred_network = "auto"            # auto | 2g | 3g | 4g (needs profile support)
+init_commands = []                    # extra AT commands after initialisation
+sms_storage = ""                      # e.g. "SM" or "ME"; empty keeps the modem default
+
+[sms]
+enabled = true
+mode = "pdu"                          # PDU mode is the only supported mode
+receive_enabled = true
+send_enabled = true
+auto_encoding = true                  # pick GSM 7-bit or UCS-2 automatically
+default_encoding = "gsm7"             # gsm7 | ucs2 (used when auto_encoding is false)
+allow_unicode = true
+allow_multipart = true
+allow_binary = true                   # 8-bit payloads through the API
+allow_flash_sms = true
+allow_service_messages = true         # announce service/WAP push messages as events
+request_delivery_reports = true
+store_raw_pdu = true
+store_sent_messages = true            # false: content of sent messages is erased after submission
+delete_from_modem_after_persist = true
+multipart_timeout_seconds = 600       # incomplete multipart messages are stored after this time
+max_message_parts = 10
+max_send_attempts = 3
+send_retry_delay_seconds = 10
+outbound_rate_limit_per_minute = 10   # SMS segments per modem and minute (0 = unlimited)
+deduplication_enabled = true
+default_modem = ""                    # modem for messages that name none; empty = any ready modem
+per_destination_interval_seconds = 0  # minimum gap between messages to one number
+default_validity_minutes = 0          # 0 = network default
+queue_expiry_seconds = 86400          # unsent messages expire (0 = never)
+delivery_report_window_days = 7
+
+[mms]
+enabled = false
+provider_profile = "auto"
+apn = ""
+mmsc_url = ""                         # carrier MMSC; retrieval only ever contacts this host
+proxy = ""
+download_attachments = false          # experimental, see docs/MODEMS.md
+max_attachment_size_mb = 10
+
+[ussd]
+enabled = true
+timeout_seconds = 30
+allow_arbitrary_codes = false         # false: only the named commands below can be run
+
+# Named USSD codes, run with `thugsred-smsgateway ussd <name>`.
+[ussd.commands]
+# balance = "*101#"
+
+[database]                            # [restart]
+driver = "sqlite"                     # sqlite | mysql
+sqlite_path = "/var/lib/thugsred-smsgateway/messages.db"
+mysql_url = ""                        # "${SMSGW_MYSQL_URL}" -> mysql://user:password@host:3306/database
+max_connections = 5
+auto_migrate = true
+sqlite_wal = true
+
+[retention]                           # days; 0 keeps data indefinitely
+message_days = 0
+recording_days = 30
+attachment_days = 30
+integration_event_days = 30
+audit_days = 90
+cleanup_interval_seconds = 3600
+
+[api]
+enabled = true                        # [restart]
+bind = "0.0.0.0"                      # [restart] listen address ("127.0.0.1" behind a reverse proxy)
+port = 8080                           # [restart]
+authentication = "none"               # none | bearer
+tokens = []                           # bearer tokens, at least 16 characters
+allowed_cidrs = ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+trusted_proxies = []                  # proxies whose X-Forwarded-For is honoured
+allowed_hosts = []                    # accepted Host headers; empty disables the check
+cors_enabled = false
+cors_allowed_origins = []
+max_request_size_kb = 256             # [restart]
+request_timeout_seconds = 30          # [restart]
+rate_limit_per_minute = 120           # per client address (0 = unlimited)
+admin_enabled = true                  # reconnect, delete, retry, integration tests, reload ...
+admin_allowed_cidrs = []              # empty: same as allowed_cidrs
+admin_tokens = []                     # empty: same access as other endpoints
+
+[web]
+enabled = true                        # [restart]
+title = "THUGSred SMS Gateway"
+theme = "dark"                        # dark | light
+refresh_interval_seconds = 10
+show_message_content = true
+show_modem_information = true
+
+[logging]                             # [restart] except log_message_content / redact_sensitive_values
+system_log = "/var/log/thugsred-smsgateway/system.log"
+messages_log = "/var/log/thugsred-smsgateway/messages.log"
+integrations_log = "/var/log/thugsred-smsgateway/integrations.log"
+audit_log = "/var/log/thugsred-smsgateway/audit.log"
+format = "json"                       # json | text
+journal_enabled = true
+rotation = "daily"                    # daily | hourly | never
+retention_days = 30
+log_message_content = false           # message text in messages.log (off: may contain personal data)
+redact_sensitive_values = true        # mask telephone numbers in logs
+
+[calls]
+enabled = true
+log_incoming = true
+log_outgoing = true
+auto_answer = false                   # opt-in; check consent and recording laws first
+recording_enabled = false             # needs auto_answer and a capture device wired to the modem
+recording_duration_seconds = 15
+audio_backend = "auto"                # auto | alsa | none
+audio_device = ""                     # ALSA capture device, e.g. "plughw:1,0"
+recording_format = "wav"
+hangup_after_recording = true
+ring_timeout_seconds = 8
+
+[gnss]
+enabled = false
+poll_interval_seconds = 60
+store_location_history = false
+modem = ""                            # modem providing GNSS; empty = first modem
+
+[integrations]
+enabled = true
+config_file = "/etc/thugsred/integrations.conf"
+worker_count = 4                      # [restart]
+persistent_queue = true               # false: undelivered events are dropped at startup
+max_attempts = 10
+retry_initial_seconds = 5
+retry_max_seconds = 3600
+
+[metrics]
+enabled = true                        # [restart]
+path = "/metrics"                     # [restart]
+
+[security]
+allow_raw_at_commands = false
+allow_raw_pdu_submission = false
+allow_destination_overrides = false
+max_outbound_queue_size = 10000
+destination_allowlist = []            # when set, only these numbers/prefixes ("+45*") can be messaged
+destination_blocklist = []
+
+# ---------------------------------------------------------------------------
+# Several modems: add one [[modems]] entry per module. Each entry inherits
+# [modem] and may override any of its settings. `sim` names a profile in
+# sim.conf. USB serial adapters often share the same serial number, so use the
+# port-based names from /dev/serial/by-path/ to keep devices apart.
+#
+# [[modems]]
+# id = "modem-1"
+# device = "/dev/serial/by-path/pci-0000:00:14.0-usb-0:1:1.0-port0"
+# sim = "sim-1"
+#
+# [[modems]]
+# id = "modem-2"
+# device = "/dev/serial/by-path/pci-0000:00:14.0-usb-0:2:1.0-port0"
+# sim = "sim-2"

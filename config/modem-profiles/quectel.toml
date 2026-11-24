@@ -1,0 +1,22 @@
+# Quectel modules: EC2x / EG2x LTE series, BG9x, M95 / MC60 2G.
+name = "quectel"
+description = "Quectel EC2x / EG2x / BG9x / M95 / MC60"
+manufacturers = ["QUECTEL"]
+models = ["EC2", "EG2", "EM0", "BG9", "M95", "M66", "MC60", "UC20", "EG9"]
+init_commands = []
+cnmi = ["2,1,0,1,0", "2,1,0,0,0"]
+iccid_commands = ["AT+QCCID", "AT+CCID"]
+network_technologies = ["GSM", "UMTS", "LTE"]
+voice = "unverified"
+audio_interfaces = ["USB audio class (UAC, AT+QPCMV)", "PCM"]
+power_on_hint = "Check the module's PWRKEY line and power supply."
+
+[gnss]
+kind = "quectel_qgps"
+test_command = "AT+QGPS=?"
+
+[network_modes]
+auto = 'AT+QCFG="nwscanmode",0'
+2g = 'AT+QCFG="nwscanmode",1'
+3g = 'AT+QCFG="nwscanmode",2'
+4g = 'AT+QCFG="nwscanmode",3'
