@@ -10,6 +10,7 @@ command -v dpkg-deb >/dev/null 2>&1 || { echo "error: dpkg-deb is required" >&2;
 # The staging tree lives in a fresh private directory below dist/.
 mkdir -p dist
 STAGE="$(mktemp -d "dist/.deb-stage.XXXXXX")"
+chmod 0755 "$STAGE"
 cleanup() {
     case "$STAGE" in
         dist/.deb-stage.*) rm -rf -- "${STAGE:?}" ;;
