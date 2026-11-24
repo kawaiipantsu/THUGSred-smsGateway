@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<meta name="referrer" content="no-referrer">
+<title>THUGSred SMS Gateway</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/assets/style.css">
+<script type="module" src="/assets/app.js"></script>
+</head>
+<body>
+<header class="top">
+  <button type="button" id="nav-toggle" class="btn ghost" aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">&#9776;</button>
+  <a class="brand" href="#/overview">
+    <img src="/favicon.svg" alt="" width="28" height="28">
+    <span id="title">THUGSred SMS Gateway</span>
+  </a>
+  <span id="instance" class="muted instance"></span>
+  <span class="grow"></span>
+  <span id="live" class="badge muted" role="status">connecting</span>
+  <button type="button" id="theme-btn" class="btn ghost small">Light theme</button>
+  <button type="button" id="token-btn" class="btn ghost small">Set token</button>
+  <button type="button" id="forget-btn" class="btn ghost small" hidden>Forget token</button>
+</header>
+<div class="shell">
+  <nav id="nav" aria-label="Main navigation">
+    <a href="#/overview">Overview</a>
+    <a href="#/send">Send SMS</a>
+    <a href="#/inbox">Inbox</a>
+    <a href="#/outbox">Outbox</a>
+    <a href="#/history">Message History</a>
+    <a href="#/queue">Message Queue</a>
+    <a href="#/pdu">PDU Tools</a>
+    <a href="#/calls">Calls</a>
+    <a href="#/integrations">Integrations</a>
+    <a href="#/modem">Modem</a>
+    <a href="#/system">System</a>
+    <a href="#/api">API Documentation</a>
+  </nav>
+  <main id="main">
+    <h1>THUGSred SMS Gateway</h1>
+    <p class="muted">Loading the dashboard…</p>
+    <noscript><p>This dashboard needs JavaScript. The REST API is available under <code>/api/v1/</code>.</p></noscript>
+  </main>
+</div>
+<footer class="foot">
+  <span>THUGSred SMS Gateway <span id="version"></span></span>
+  <a href="https://thugs.red" rel="noopener noreferrer" target="_blank">thugs.red</a>
+</footer>
+<div id="toasts" aria-live="polite"></div>
+</body>
+</html>
