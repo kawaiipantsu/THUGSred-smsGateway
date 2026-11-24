@@ -145,7 +145,7 @@ restore: ## Restore a backup: make restore BACKUP=/path/to/file (stops the servi
 	@[ -n "$(BACKUP)" ] || { echo "usage: make restore BACKUP=/path/to/messages-YYYYMMDDTHHMMSSZ.db"; exit 1; }
 	@printf 'This replaces the current message database with %s. Type "restore" to continue: ' '$(BACKUP)'; read a; [ "$$a" = "restore" ] || { echo aborted; exit 1; }
 	$(SUDO) systemctl stop $(SERVICE)
-	$(SUDO) -u $(SERVICE) '$(INSTALLED)' --config '$(CONFIG)' db restore '$(BACKUP)' --yes
+	$(SUDO) '$(INSTALLED)' --config '$(CONFIG)' db restore '$(BACKUP)' --yes
 	$(SUDO) systemctl start $(SERVICE)
 
 doctor: ## Diagnose the installation (uses the installed binary when present)

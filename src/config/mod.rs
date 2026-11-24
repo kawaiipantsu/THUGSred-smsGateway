@@ -1394,14 +1394,27 @@ impl Config {
         if self.paths != new.paths {
             out.push("paths");
         }
-        let ids = |c: &Config| {
-            c.modems
-                .iter()
-                .map(|m| (m.id.clone(), m.enabled))
-                .collect::<Vec<_>>()
-        };
+        // Enabling or disabling a configured modem is applied live; only a
+        // changed set of modems needs a restart.
+        let ids = |c: &Config| c.modems.iter().map(|m| m.id.clone()).collect::<Vec<_>>();
         if ids(self) != ids(new) {
-            out.push("modems (adding, removing, enabling or disabling a modem)");
+            out.push("modems (adding or removing a modem)");
+        }
+        if (
+            self.api.max_request_size_kb,
+            self.api.request_timeout_seconds,
+        ) != (new.api.max_request_size_kb, new.api.request_timeout_seconds)
+        {
+            out.push("api.max_request_size_kb/request_timeout_seconds");
+        }
+        if self.web.enabled != new.web.enabled {
+            out.push("web.enabled");
+        }
+        if self.metrics != new.metrics {
+            out.push("metrics");
+        }
+        if self.integrations.persistent_queue != new.integrations.persistent_queue {
+            out.push("integrations.persistent_queue");
         }
         if self.integrations.worker_count != new.integrations.worker_count {
             out.push("integrations.worker_count");

@@ -135,18 +135,24 @@ impl ProfileSet {
     pub fn detect(&self, manufacturer: &str, model: &str) -> &ModemProfile {
         let (man, model) = (manufacturer.to_uppercase(), model.to_uppercase());
         let hit = |list: &[String], hay: &str| list.iter().any(|m| hay.contains(&m.to_uppercase()));
-        self.profiles
+        if let Some(p) = self
+            .profiles
             .iter()
             .find(|p| !p.models.is_empty() && hit(&p.models, &model))
-            .or_else(|| {
-                self.profiles.iter().find(|p| {
-                    p.models.is_empty()
-                        && !p.manufacturers.is_empty()
-                        && hit(&p.manufacturers, &man)
-                })
-            })
-            .or_else(|| self.get("generic"))
-            .unwrap_or(&self.profiles[0])
+        {
+            return p;
+        }
+        // Unknown model: use the manufacturer when it identifies exactly one
+        // profile; otherwise fall back to the generic profile rather than guess.
+        let by_maker: Vec<&ModemProfile> = self
+            .profiles
+            .iter()
+            .filter(|p| !p.manufacturers.is_empty() && hit(&p.manufacturers, &man))
+            .collect();
+        match by_maker.as_slice() {
+            [only] => only,
+            _ => self.get("generic").unwrap_or(&self.profiles[0]),
+        }
     }
 
     /// Resolve the configured profile name (`auto` detects).
@@ -176,6 +182,16 @@ mod tests {
         );
         assert_eq!(set.detect("Quectel", "EC25").name, "quectel");
         assert_eq!(set.detect("Acme", "X1").name, "generic");
+        assert_eq!(
+            set.detect("Quectel", "UNLISTED-9").name,
+            "quectel",
+            "single manufacturer match"
+        );
+        assert_eq!(
+            set.detect("SIMCOM_Ltd", "SIM9999").name,
+            "generic",
+            "ambiguous manufacturer is not guessed"
+        );
         assert_eq!(set.resolve("quectel", "SIMCOM", "SIM800").name, "quectel");
         assert_eq!(
             set.resolve("missing", "SIMCOM", "SIM800L").name,

@@ -321,6 +321,12 @@ fn ops() -> Vec<Op> {
         ),
         op(
             "get",
+            "/api/v1/attachments/{id}/download",
+            "Messages",
+            "Download a stored attachment (application/octet-stream)",
+        ),
+        op(
+            "get",
             "/api/v1/integrations",
             "Integrations",
             "Configured integrations, routing rules and delivery statistics",

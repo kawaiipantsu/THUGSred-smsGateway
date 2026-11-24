@@ -456,3 +456,24 @@ async fn cancel_schedule_expiry_and_policy() {
     assert_eq!(h.message_status(&a).await, "expired");
     h.stop().await;
 }
+
+#[tokio::test]
+async fn deduplication_can_be_disabled() {
+    let h = start(Setup {
+        main: "[sms]\ndeduplication_enabled = false\n".into(),
+        ..Default::default()
+    })
+    .await;
+    h.ready().await;
+    let pdu = encode_deliver(&DeliverSpec::text("+4500000042", "same PDU twice", ts()))
+        .unwrap()
+        .remove(0);
+    h.sim().incoming_direct(&pdu);
+    h.sim().incoming_direct(&pdu);
+    assert_eq!(
+        h.wait_inbound(2).await.len(),
+        2,
+        "with deduplication off every PDU is stored"
+    );
+    h.stop().await;
+}

@@ -100,7 +100,26 @@ impl SmsService {
     }
 
     /// Resolve which modem (if any) a request is pinned to.
-    fn select_modem(cfg: &Config, req: &SendRequest) -> Result<Option<String>, SubmitError> {
+    /// SIM profile in use on a modem: the profile the modem bound at its
+    /// last initialisation (by `sim =` or by ICCID), else the configured one.
+    pub(crate) async fn sim_of(
+        &self,
+        cfg: &Config,
+        modem_id: &str,
+    ) -> Option<crate::config::SimProfile> {
+        let bound = self.db.bound_sim_id(modem_id).await.ok().flatten();
+        bound
+            .as_deref()
+            .and_then(|id| cfg.sim(id))
+            .or_else(|| cfg.sim_for_modem(modem_id))
+            .cloned()
+    }
+
+    async fn select_modem(
+        &self,
+        cfg: &Config,
+        req: &SendRequest,
+    ) -> Result<Option<String>, SubmitError> {
         if let Some(id) = req.modem.as_deref().filter(|m| !m.is_empty()) {
             return match cfg.modem(id) {
                 Some(m) if m.enabled => Ok(Some(id.to_string())),
@@ -109,22 +128,21 @@ impl SmsService {
             };
         }
         if let Some(from) = req.from.as_deref().filter(|m| !m.is_empty()) {
-            let hit = cfg.modems.iter().find(|m| {
-                m.enabled
-                    && cfg
-                        .sim_for_modem(&m.id)
-                        .map(|s| {
-                            !s.mobile_number.is_empty()
-                                && utils::numbers_match(&s.mobile_number, from)
-                        })
-                        .unwrap_or(false)
-            });
-            return match hit {
-                Some(m) => Ok(Some(m.id.clone())),
-                None => Err(SubmitError::Invalid(format!(
-                    "no configured SIM has the gateway number {from:?}; `from` selects one of the gateway's own SIMs and cannot set an arbitrary sender"
-                ))),
-            };
+            for m in cfg.modems.iter().filter(|m| m.enabled) {
+                let matches = self
+                    .sim_of(cfg, &m.id)
+                    .await
+                    .map(|s| {
+                        !s.mobile_number.is_empty() && utils::numbers_match(&s.mobile_number, from)
+                    })
+                    .unwrap_or(false);
+                if matches {
+                    return Ok(Some(m.id.clone()));
+                }
+            }
+            return Err(SubmitError::Invalid(format!(
+                "no configured SIM has the gateway number {from:?}; `from` selects one of the gateway's own SIMs and cannot set an arbitrary sender"
+            )));
         }
         Ok(None)
     }
@@ -288,7 +306,7 @@ impl SmsService {
                 ));
             }
         }
-        let modem_id = Self::select_modem(&cfg, &req)?;
+        let modem_id = self.select_modem(&cfg, &req).await?;
         let enc_req = Self::encoder_request(&cfg, &req, &to)?;
         let encoded =
             pdu::encode_submit(&enc_req).map_err(|e| SubmitError::Invalid(e.to_string()))?;
@@ -316,7 +334,11 @@ impl SmsService {
         } else {
             "queued"
         };
-        let sim = modem_id.as_deref().and_then(|m| cfg.sim_for_modem(m));
+        let sim = match modem_id.as_deref() {
+            Some(m) => self.sim_of(&cfg, m).await,
+            None => None,
+        };
+        let sim = sim.as_ref();
         let message_type = match (&enc_req.payload, enc_req.message_class) {
             (Payload::Binary(_), _) => "binary",
             (_, Some(0)) => "flash",
@@ -428,7 +450,7 @@ impl SmsService {
         modem_id: &str,
         segments: i64,
     ) -> Result<Option<String>, crate::database::DbError> {
-        let Some(sim) = cfg.sim_for_modem(modem_id) else {
+        let Some(sim) = self.sim_of(cfg, modem_id).await else {
             return Ok(None);
         };
         let (day, month) = quota_windows(cfg, Utc::now());

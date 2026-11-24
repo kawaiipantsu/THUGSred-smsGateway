@@ -21,7 +21,7 @@ imsi = ""
 
 [network]
 selection = "automatic"               # automatic | manual
-operator_code = ""                    # MCC+MNC for manual selection, e.g. "23801"
+operator_code = ""                    # MCC+MNC for manual selection, e.g. "00101"
 roaming_enabled = false               # false: nothing is sent while the SIM is roaming
 apn = ""
 username = ""

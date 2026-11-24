@@ -557,6 +557,15 @@ async fn db_command(cli: &Cli, command: &DbCommand) -> Result<()> {
             }
             std::fs::copy(file, target)
                 .with_context(|| format!("cannot copy {file} to {target}"))?;
+            // Give the restored file to the owner of its directory (the
+            // service account) when this command runs as root.
+            if let Some(meta) = std::path::Path::new(target)
+                .parent()
+                .and_then(|d| std::fs::metadata(d).ok())
+            {
+                use std::os::unix::fs::MetadataExt;
+                let _ = std::os::unix::fs::chown(target, Some(meta.uid()), Some(meta.gid()));
+            }
             println!("restored {file} to {target}");
             Ok(())
         }

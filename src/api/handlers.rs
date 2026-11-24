@@ -768,38 +768,49 @@ pub async fn sms_send_pdu(
         .insert_message(&msg, std::slice::from_ref(&part))
         .await?;
     audit(&s, &ctx, "sms.raw_pdu", Some(&id), None).await;
-    let (state, err, mr) = match m.send_pdu(tpdu_len, pdu_hex).await {
-        Ok(mr) => ("submitted", None, Some(mr as i64)),
-        Err(crate::modem::SendError::Ambiguous(e)) => ("submission_unknown", Some(e), None),
-        Err(e) => ("failed", Some(e.to_string()), None),
-    };
-    let part_state = match state {
-        "submitted" => "submitted",
-        "submission_unknown" => "unknown",
-        _ => "failed",
-    };
-    s.gw.db
-        .update_part(&part.id, part_state, mr, err.as_deref())
-        .await?;
-    s.gw.db
-        .set_message_state(&id, state, err.as_deref(), true, None)
-        .await?;
-    if let Some(r) = mr {
-        s.gw.db.set_modem_ref(&id, r).await?;
-    }
-    msg.status = state.into();
-    msg.error = err.clone();
-    s.gw.events
-        .emit(
-            if state == "submitted" {
-                "sms.sent"
-            } else {
-                "sms.failed"
-            },
-            Some(&id),
-            crate::events::message_data(&msg),
+    // The submission runs detached: if the HTTP request is cancelled or times
+    // out, the outcome is still recorded and the message never stays in
+    // `processing`.
+    let (gw, modem, part_id, mid) = (s.gw.clone(), m.clone(), part.id.clone(), id.clone());
+    let task = tokio::spawn(async move {
+        let (state, err, mr) = match modem.send_pdu(tpdu_len, pdu_hex).await {
+            Ok(mr) => ("submitted", None, Some(mr as i64)),
+            Err(crate::modem::SendError::Ambiguous(e)) => ("submission_unknown", Some(e), None),
+            Err(e) => ("failed", Some(e.to_string()), None),
+        };
+        let part_state = match state {
+            "submitted" => "submitted",
+            "submission_unknown" => "unknown",
+            _ => "failed",
+        };
+        gw.db
+            .update_part(&part_id, part_state, mr, err.as_deref())
+            .await?;
+        gw.db
+            .set_message_state(&mid, state, err.as_deref(), true, None)
+            .await?;
+        if let Some(r) = mr {
+            gw.db.set_modem_ref(&mid, r).await?;
+        }
+        msg.status = state.into();
+        msg.error = err.clone();
+        let event = if state == "submitted" {
+            "sms.sent"
+        } else {
+            "sms.failed"
+        };
+        gw.events
+            .emit(event, Some(&mid), crate::events::message_data(&msg))
+            .await;
+        Ok::<_, crate::database::DbError>((state, err, mr))
+    });
+    let (state, err, mr) = task.await.map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "internal_error",
+            "submission task failed",
         )
-        .await;
+    })??;
     ok(json!({"message_id": id, "status": state, "error": err, "message_reference": mr}))
 }
 

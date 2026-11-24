@@ -808,6 +808,32 @@ async fn reload_applies_valid_changes_and_keeps_last_good_configuration() {
     .await;
     h.ready().await;
     assert_eq!(h.events("gateway.config_reloaded").await.len(), 3);
+    // A SIM setting change is applied by reconnecting the modem as well.
+    let before = h.events("modem.connected").await.len();
+    std::fs::write(
+        h.dir.path().join("sim.conf"),
+        "[sim]\nsmsc = \"+4500000001\"\n",
+    )
+    .unwrap();
+    h.gw.reload().await.unwrap();
+    let db = h.gw.db.clone();
+    wait("modem reconnected after SIM change", 20, || {
+        let db = db.clone();
+        async move {
+            db.list_events(Some("modem.connected"), None, 50, 0)
+                .await
+                .unwrap()
+                .1 as usize
+                > before
+        }
+    })
+    .await;
+    h.ready().await;
+    assert!(h
+        .sim()
+        .commands()
+        .iter()
+        .any(|c| c.starts_with("AT+CSCA=\"+4500000001\"")));
     h.stop().await;
 }
 

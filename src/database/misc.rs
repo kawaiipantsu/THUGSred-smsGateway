@@ -525,6 +525,17 @@ impl Db {
         Ok(())
     }
 
+    /// SIM profile bound to a modem at its last successful initialisation.
+    pub async fn bound_sim_id(&self, modem_id: &str) -> DbResult<Option<String>> {
+        Ok(self
+            .row(
+                "SELECT sim_id FROM sim_information WHERE modem_id = ?",
+                params![modem_id],
+            )
+            .await?
+            .and_then(|r| get_s(&r, "sim_id")))
+    }
+
     pub async fn insert_ussd(&self, id: &str, modem_id: &str, code: &str) -> DbResult<()> {
         self.exec(
             "INSERT INTO ussd_sessions (id, modem_id, code, status, created_at) VALUES (?, ?, ?, 'pending', ?)",

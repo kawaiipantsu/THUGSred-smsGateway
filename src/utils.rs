@@ -63,6 +63,11 @@ pub fn numbers_match(a: &str, b: &str) -> bool {
     if a == b {
         return true;
     }
+    // Two international numbers must match exactly. The suffix comparison
+    // only bridges national and international notation of one number.
+    if a.starts_with('+') && b.starts_with('+') {
+        return false;
+    }
     let (sa, sb) = (number_suffix(&a, 8), number_suffix(&b, 8));
     sa.len() >= 6 && sa == sb
 }
@@ -144,6 +149,10 @@ mod tests {
         assert!(numbers_match("+4512345678", "12345678"));
         assert!(!numbers_match("+4512345678", "+4512345679"));
         assert!(!numbers_match("123", "9123"));
+        assert!(
+            !numbers_match("+4612345678", "+4512345678"),
+            "same suffix, different country"
+        );
         assert_eq!(mask_number("+4512345678"), "+45******78");
     }
 

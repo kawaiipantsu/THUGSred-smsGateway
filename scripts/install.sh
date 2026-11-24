@@ -122,9 +122,9 @@ if [ -z "$DESTDIR" ]; then
 Installation complete. Nothing was enabled or started.
 
   1. Review   $CONFDIR/smsgateway.conf and $CONFDIR/sim.conf
-  2. Check    $PREFIX/bin/thugsred-smsgateway check-config
+  2. Check    sudo $PREFIX/bin/thugsred-smsgateway check-config
   3. Start    sudo systemctl enable --now thugsred-smsgateway
-  4. Verify   $PREFIX/bin/thugsred-smsgateway doctor
+  4. Verify   sudo $PREFIX/bin/thugsred-smsgateway doctor
 
 GSM modules such as the SIM868 must be powered on by hand (hold PWRKEY)
 after they are attached; the gateway connects as soon as the module answers.

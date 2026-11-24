@@ -372,6 +372,11 @@ async fn history_search_export_and_untrusted_content() {
     assert_eq!(r.status(), 200);
     let (code, _) = get(&base, &format!("/api/v1/messages/{id}")).await;
     assert_eq!(code, 404);
+    let (_, ev) = get(&base, "/api/v1/events?type=sms.").await;
+    assert_eq!(
+        ev["pagination"]["total"], 2,
+        "events carrying the deleted message's content are removed with it"
+    );
     h.stop().await;
 }
 

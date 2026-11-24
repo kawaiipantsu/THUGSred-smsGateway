@@ -318,6 +318,15 @@ impl Db {
     pub async fn delete_message(&self, id: &str) -> DbResult<bool> {
         let mut tx = self.begin().await?;
         let n = Self::tx_exec(&mut tx, "DELETE FROM messages WHERE id = ?", params![id]).await?;
+        // Events about the message carry its content, so they go with it
+        // (together with their integration delivery records).
+        for sql in [
+            "DELETE FROM integration_attempts WHERE delivery_id IN (SELECT ie.id FROM integration_events ie JOIN events e ON e.id = ie.event_id WHERE e.correlation_id = ?)",
+            "DELETE FROM integration_events WHERE event_id IN (SELECT id FROM events WHERE correlation_id = ?)",
+            "DELETE FROM events WHERE correlation_id = ?",
+        ] {
+            Self::tx_exec(&mut tx, sql, params![id]).await?;
+        }
         for sql in [
             "DELETE FROM message_parts WHERE message_id = ?",
             "DELETE FROM message_status_history WHERE message_id = ?",

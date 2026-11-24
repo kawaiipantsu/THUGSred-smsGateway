@@ -94,7 +94,18 @@ impl Worker {
                 _ = config_check.tick() => {
                     // Apply modem setting changes from a configuration reload.
                     match self.mc() {
-                        Some(new) if &new == mc => Ok(()),
+                        Some(new) if &new == mc => {
+                            // SIM settings (PIN, SMSC, roaming, operator) are
+                            // applied at connect time, so a change reconnects.
+                            let cfg = self.deps.cfg.load();
+                            let current = lp.sim.as_ref().and_then(|s| cfg.sim(&s.id));
+                            if lp.sim.as_ref() == current {
+                                Ok(())
+                            } else {
+                                tracing::info!(modem = %self.id, "SIM configuration changed; reconnecting");
+                                Err(End::Reconnect)
+                            }
+                        }
                         Some(new) if !new.enabled => {
                             tracing::info!(modem = %self.id, "modem disabled by configuration");
                             Err(End::Reconnect)

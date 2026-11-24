@@ -92,8 +92,12 @@ impl SmsService {
         let pdu_hex = pdu_hex.trim().to_ascii_uppercase();
         // The fingerprint covers the whole PDU (sender, service-centre
         // timestamp, headers and content), scoped to the receiving modem.
-        let fingerprint = utils::sha256_hex(format!("{modem_id}:{pdu_hex}").as_bytes());
-        if cfg.sms.deduplication_enabled && self.db.fingerprint_known(&fingerprint).await? {
+        let mut fingerprint = utils::sha256_hex(format!("{modem_id}:{pdu_hex}").as_bytes());
+        if !cfg.sms.deduplication_enabled {
+            // Without deduplication every PDU is stored, so the fingerprint
+            // (which is unique in the database) is made unique per ingestion.
+            fingerprint = format!("{fingerprint}:{}", utils::new_id());
+        } else if self.db.fingerprint_known(&fingerprint).await? {
             tracing::debug!(modem = %modem_id, "duplicate PDU ignored");
             return Ok(());
         }
