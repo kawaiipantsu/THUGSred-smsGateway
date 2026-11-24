@@ -389,5 +389,7 @@ categories mark the part, and with it the message, as `delivery_failed`.
   is rejected.
 - Messages that cannot be decoded are not discarded: the gateway stores them as raw records
   with status `malformed` and the decoder's error text.
-- The codec has been tested with constructed PDUs and round trips. It has not yet been
-  exercised with PDUs captured from a live network through the gateway.
+- The codec has been tested with constructed PDUs and round trips. With PDUs from a live
+  network it has so far only been exercised for a received single-part GSM 7-bit message
+  (including the national characters å ø æ), a sent single-part GSM 7-bit message and the
+  delivery report for the sent one; UCS-2, multipart, binary and flash PDUs from a real network are unverified.

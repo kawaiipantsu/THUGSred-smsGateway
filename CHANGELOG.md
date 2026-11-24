@@ -91,10 +91,13 @@ Initial release.
 - Verified on real hardware with one module only (SIMCom SIM868 on a Waveshare
   GSM/GPRS/GNSS HAT, attached by USB to an x86_64 Debian host): connection, identification,
   profile and capability detection, SIM ready detection, registration, operator, signal and
-  storage queries, and the powered-off hint. **Sending and receiving SMS over the air,
-  delivery reports, USSD, calls, recording, GNSS positions, MMS retrieval, multi-modem
-  operation with several physical modules, Quectel and SIMCom LTE modules have not been
-  verified on real hardware.**
+  storage queries, and the powered-off hint; and, over a real mobile network, receiving a
+  single-part GSM 7-bit SMS including national characters (å ø æ) with persist-then-delete
+  from SIM storage, sending a single-part GSM 7-bit SMS from the dashboard, and reception
+  and correlation of the delivery report for that message. **UCS-2, multipart, binary and
+  flash messages, USSD, calls, recording, GNSS position fixes, MMS, multi-modem operation
+  with several physical modules, Quectel and SIMCom LTE modules have not been verified on
+  real hardware.**
 - Builds for `aarch64`, but has not yet been run on a Raspberry Pi by the maintainers.
 - The HTTP interface is plain HTTP; TLS requires a reverse proxy. Authentication is off by
   default: do not expose the gateway to untrusted networks.

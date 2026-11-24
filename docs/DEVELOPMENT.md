@@ -213,7 +213,9 @@ To add a built-in profile:
    with an honest status. A profile written from a manual and not run on hardware is
    "unverified".
 
-Order matters: the first profile whose `models` list matches wins.
+Order matters: the first profile whose `models` list matches wins. A manufacturer is only
+used for unlisted models, and only when exactly one profile names it; a new profile that
+shares a manufacturer with an existing one makes that fallback ambiguous (`generic`).
 
 ## Adding an integration type
 

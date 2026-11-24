@@ -205,9 +205,11 @@ identical text sent twice by the same sender has different timestamps and is sto
   when it is (`sms.deduplication_enabled`, default true). A skipped duplicate counts as
   handled, so it is deleted from the modem.
 - Two copies arriving at the same moment are caught by the unique index.
-- `sms.deduplication_enabled = false` only switches off the check before processing. The
-  unique indexes remain, so an identical PDU is still not stored a second time. The setting
-  does not allow duplicates into the database.
+- With `sms.deduplication_enabled = false` every PDU the modem presents is stored, repeats
+  included: the stored fingerprint is then made unique per ingestion, so neither the check
+  nor the unique index rejects anything. Expect duplicate messages whenever the modem
+  presents a PDU twice (for example a notification followed by the storage poll before the
+  message was deleted); leave the setting on unless you have a specific reason.
 - Fingerprints live as long as their rows. Once retention has removed a message, the same
   PDU would be accepted again; this matters only if you keep messages on the modem
   (`sms.delete_from_modem_after_persist = false`) **and** use a message retention period.
@@ -238,10 +240,12 @@ Privacy-relevant details:
 
 - **Events keep message content.** The `events` table stores the full event data, including
   message text, numbers and (when stored) the raw PDU, for `integration_event_days`.
-  Deleting a message through the API, `message_days`, and `sms.store_sent_messages = false`
-  remove or erase the *message* rows only; the events that were emitted for the message
-  remain readable through `GET /api/v1/events` until event retention removes them. Set
-  `integration_event_days` with that in mind.
+  **Deleting a message through the API** (`DELETE /api/v1/messages/{id}`) also deletes the
+  events that reference it (those whose correlation id is the message id) together with
+  their integration deliveries and delivery attempts. Message retention (`message_days`) and
+  `sms.store_sent_messages = false` do **not**: they remove or erase the *message* rows only,
+  and the events emitted for those messages remain readable through `GET /api/v1/events`
+  until event retention removes them. Set `integration_event_days` with that in mind.
 - `message_days = 0` means messages are kept forever by default. Set a period if you must
   limit how long personal data is stored.
 - Monthly SIM quotas are counted from `message_parts`. A `message_days` shorter than a month

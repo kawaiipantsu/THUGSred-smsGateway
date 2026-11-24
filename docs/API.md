@@ -546,7 +546,10 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/sms/estimate \
 Requires `security.allow_raw_pdu_submission = true`. The PDU must be an SMS-SUBMIT in modem
 format (with the service centre prefix). The destination is checked against the allow and
 block lists. The PDU is handed to the modem immediately, bypassing the queue, rate limits and
-SIM quotas, and the call waits for the modem's answer.
+SIM quotas, and the call waits for the modem's answer. The submission itself runs
+independently of the HTTP request: if the request times out first (`504`), the submission
+still completes and its outcome is recorded on the message, which never stays in
+`processing`. Read the result from the message's status before deciding to send again.
 
 ```sh
 curl -sS -X POST http://127.0.0.1:8080/api/v1/sms/send-pdu \
@@ -677,8 +680,9 @@ Part objects have the fields `id`, `message_id`, `direction`, `modem_id`, `addre
 `tpdu_length`, `status`, `modem_ref`, `error`, `submitted_at`, `delivered_at`, `created_at`.
 
 `DELETE` returns `{"deleted": true, "message_id": "..."}`. A message that is being
-transmitted (`processing`) cannot be deleted (`409`). Events that were emitted for the
-message are not deleted with it; see [DATABASE.md](DATABASE.md#retention).
+transmitted (`processing`) cannot be deleted (`409`). The events that reference the message
+(by correlation id) and their integration delivery records are deleted with it; attachments
+are not. See [DATABASE.md](DATABASE.md#retention).
 
 ## Queue
 
@@ -1058,8 +1062,8 @@ The numbers on the anonymous list are not returned, only their count.
 `GET /api/v1/openapi.json` serves an OpenAPI 3.0.3 description of the API. It lists paths,
 query and path parameters, example request bodies for the main operations, the error schema
 and the bearer security scheme; administrative operations carry `"x-admin": true`. It does
-not describe response bodies in detail, and it does not list
-`/api/v1/attachments/{id}/download`, `/api/v1/ui/config` or itself; this document does. The dashboard's API
+not describe response bodies in detail, it does not list `/api/v1/ui/config` or itself, and
+it lists the metrics endpoint under the fixed path `/metrics`; this document covers those. The dashboard's API
 Documentation page renders it.
 
 ```sh

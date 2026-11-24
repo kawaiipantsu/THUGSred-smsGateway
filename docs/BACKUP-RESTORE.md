@@ -98,8 +98,7 @@ taken is lost.
 ```sh
 sudo systemctl stop thugsred-smsgateway
 
-sudo -u thugsred-smsgateway $BIN db restore \
-    /opt/THUGSred-smsGateway/backups/messages-20261124T110000Z.db --yes
+sudo $BIN db restore /opt/THUGSred-smsGateway/backups/messages-20261124T110000Z.db --yes
 
 sudo systemctl start thugsred-smsgateway
 sudo $BIN status
@@ -114,24 +113,21 @@ What `db restore` does:
    same directory. Nothing is deleted.
 5. Removes the stale `-wal` and `-shm` companion files.
 6. Copies the backup into place.
+7. Gives the restored file to the owner (user and group) of the directory it lies in, which
+   is the service account in a normal installation. This matters when the command runs as
+   root.
 
 Important:
 
 - **Stop the daemon first.** The command does not check whether it is running; restoring
   under a running daemon corrupts its view of the database.
-- **Run it as the service account**, as shown. The restored file belongs to whoever runs the
-  command; a file owned by root cannot be written by the service. If you had to run it as
-  root, fix the ownership before starting the service:
-
-  ```sh
-  sudo chown thugsred-smsgateway: /var/lib/thugsred-smsgateway/messages.db
-  ```
-
-  Running as the service account requires that the configuration loads for that account.
-  It cannot read `smsgateway.env` (mode `0600`, root), so if your configuration uses
-  `${NAME}` references for enabled settings, run the restore as root and fix the ownership
-  as above.
-- The backup file must be readable by the account that runs the restore.
+- **Run it as root (`sudo`)**, as shown. Root can read `smsgateway.env`, so the
+  configuration loads even when it uses `${NAME}` references, and the restored file ends up
+  owned by the service account (step 7). Running it as the service account also works when
+  the configuration loads for that account and it can read the backup file.
+- The ownership change applies to the restored database file only, and only succeeds for
+  root. After restoring into a directory with unusual ownership, check that the service
+  account can write `messages.db`.
 - Messages that were waiting in the queue at backup time are in the restored database and
   **will be sent** when the service starts. If they were already sent after the backup was
   taken, they go out a second time. Review `GET /api/v1/queue` right after starting, or
@@ -147,11 +143,10 @@ Important:
 make restore BACKUP=/opt/THUGSred-smsGateway/backups/messages-20261124T110000Z.db
 ```
 
-asks you to type `restore`, stops the service, runs `db restore ... --yes` as the service
-account and starts the service again. **Run it as a normal user who may use `sudo`, not as
-root and not through `sudo make`.** The target relies on `sudo -u` to switch to the service
-account; started as root it has no `sudo` prefix, the restore step does not run, and the
-service is simply restarted with the old database. When in doubt use the manual steps above.
+asks you to type `restore`, stops the service, runs `db restore ... --yes` and starts the
+service again. It works both as root and as a normal user who may use `sudo` (the privileged
+steps are then run through `sudo`). With a non-default installation pass the same `PREFIX=`
+and `CONFIG=` as elsewhere.
 
 ## MySQL and MariaDB
 

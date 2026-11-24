@@ -22,7 +22,7 @@ The **Applies** column in the tables below uses:
 | --- | --- |
 | reload | Takes effect with the next configuration reload |
 | restart | Needs a restart of the service. Marked `(reported)` when a reload lists the setting under `restart_required`. |
-| reconnect | Takes effect when the affected modem connects the next time. Changes to a modem's own settings trigger that reconnect automatically within a few seconds of a reload. |
+| reconnect | Takes effect when the affected modem connects the next time. Changes to a modem's own settings, and to the SIM profile bound to it, trigger that reconnect automatically within a few seconds of a reload. |
 
 ## Files and loading order
 
@@ -211,19 +211,20 @@ What happens:
 5. Changed settings that only take effect after a restart are returned and logged as
    `restart_required`.
 
-`restart_required` reports changes to: `database`, `api.enabled/bind/port`, the log files,
-format and rotation, `paths`, the set of modems (adding, removing, enabling or disabling),
-`integrations.worker_count` and `general.instance_id`.
+`restart_required` reports changes to: `database`, `api.enabled/bind/port`,
+`api.max_request_size_kb/request_timeout_seconds`, `web.enabled`, `metrics`, the log files,
+format and rotation, `paths`, the set of modems (adding or removing a modem),
+`integrations.persistent_queue`, `integrations.worker_count` and `general.instance_id`.
 
-Limits of that report, which the tables below take into account:
+Worth knowing:
 
-- `api.max_request_size_kb`, `api.request_timeout_seconds`, `web.enabled`, `metrics.enabled`,
-  `metrics.path` and `integrations.persistent_queue` are also only read at startup, but a
-  reload does not list them.
-- Enabling or disabling an existing modem is listed, although the modem's supervisor does
-  react to the `enabled` flag at runtime. Adding and removing modems really needs a restart.
-- PIN, SMSC, network selection and roaming settings of a SIM profile are captured when the
-  modem connects. A reload alone does not apply them; run `modem reconnect` afterwards.
+- Enabling or disabling an already configured modem is applied live. Only adding or removing
+  a `[[modems]]` entry needs a restart.
+- PIN, SMSC, network selection and roaming settings of a SIM profile are applied when the
+  modem connects. After a reload the supervisor notices that the SIM profile bound to its
+  modem changed and reconnects the modem on its own, within a few seconds.
+- Modem profile files (`paths.modem_profiles`) are read at startup only; changing a file is
+  not detected by a reload.
 
 Check the outcome with `GET /api/v1/config/status` or the `config` object in
 `GET /api/v1/status`:
@@ -287,9 +288,9 @@ override any field. Changes to a modem's settings are applied by reconnecting th
 
 | Field | Type | Default | Valid values | Applies |
 | --- | --- | --- | --- | --- |
-| `id` | string | `"modem-1"` (`modem-N` for the N-th `[[modems]]` entry) | Letters, digits, `-`, `_`; unique | restart (reported) |
+| `id` | string | `"modem-1"` (`modem-N` for the N-th `[[modems]]` entry) | Letters, digits, `-`, `_`; unique. Adding, removing or renaming a modem needs a restart. | restart (reported) |
 | `sim` | string | `""` | Id of a SIM profile in `sim.conf`; empty for automatic binding | reconnect |
-| `enabled` | boolean | `true` | | restart (reported); see [Reload semantics](#reload-semantics) |
+| `enabled` | boolean | `true` | `false`: the modem is not opened (state `DISABLED`) | reload |
 | `profile` | string | `"auto"` | `auto`, `generic`, `simcom-2g`, `simcom-lte`, `quectel`, or a custom profile name | reconnect |
 | `device` | string | `"/dev/ttyS0"` | Serial device path; non-empty; unique among enabled modems | reconnect |
 | `baud_rate` | integer | `115200` | Greater than 0 | reconnect |
@@ -337,7 +338,7 @@ All fields apply on reload.
 | `max_send_attempts` | integer | `3` | Greater than 0. Rejected submissions before a message fails. |
 | `send_retry_delay_seconds` | integer | `10` | First retry delay; doubles per attempt, at most one hour |
 | `outbound_rate_limit_per_minute` | integer | `10` | SMS segments per modem and minute; 0 = unlimited |
-| `deduplication_enabled` | boolean | `true` | Skip PDUs whose fingerprint is already stored. See [DATABASE.md](DATABASE.md#deduplication-fingerprints) for what `false` does and does not change. |
+| `deduplication_enabled` | boolean | `true` | Skip PDUs whose fingerprint is already stored. See [DATABASE.md](DATABASE.md#deduplication-fingerprints) for what `false` means. |
 | `default_modem` | string | `""` | A configured modem id. The modem for messages that name none; empty = any ready modem. |
 | `per_destination_interval_seconds` | integer | `0` | Minimum gap between two messages to the same number; 0 disables |
 | `default_validity_minutes` | integer | `0` | Default validity period; 0 lets the network decide. Requests may pass 1 to 635040. |
@@ -414,8 +415,8 @@ See [DATABASE.md](DATABASE.md#retention) for exactly what is and is not removed.
 | `allowed_hosts` | list of strings | `[]` | Accepted `Host` header values (with or without port); empty disables the check | reload |
 | `cors_enabled` | boolean | `false` | | reload |
 | `cors_allowed_origins` | list of strings | `[]` | Exact origins, for example `"https://app.example.invalid"`; at least one when CORS is enabled | reload |
-| `max_request_size_kb` | integer | `256` | Greater than 0 | restart |
-| `request_timeout_seconds` | integer | `30` | Greater than 0 | restart |
+| `max_request_size_kb` | integer | `256` | Greater than 0 | restart (reported) |
+| `request_timeout_seconds` | integer | `30` | Greater than 0 | restart (reported) |
 | `rate_limit_per_minute` | integer | `120` | Requests per client address and minute; 0 = unlimited | reload |
 | `admin_enabled` | boolean | `true` | `false` disables every administrative endpoint | reload |
 | `admin_allowed_cidrs` | list of strings | `[]` | Additional restriction for administrative endpoints; empty = same as `allowed_cidrs` | reload |
@@ -427,7 +428,7 @@ See [SECURITY.md](SECURITY.md#access-controls) for how these combine.
 
 | Field | Type | Default | Valid values and meaning | Applies |
 | --- | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Serve the dashboard | restart |
+| `enabled` | boolean | `true` | Serve the dashboard | restart (reported) |
 | `title` | string | `"THUGSred SMS Gateway"` | Dashboard title | reload |
 | `theme` | string | `"dark"` | `dark`, `light`. Default theme; a viewer can switch in the browser. | reload |
 | `refresh_interval_seconds` | integer | `10` | Greater than 0. Polling interval of the dashboard. | reload |
@@ -488,7 +489,7 @@ See [CALLS.md](CALLS.md).
 | `enabled` | boolean | `true` | Master switch: `false` means no event is routed to any integration | reload |
 | `config_file` | string | `"/etc/thugsred/integrations.conf"` | Integrations file | reload |
 | `worker_count` | integer | `4` | 1 to 64. Concurrent deliveries. | restart (reported) |
-| `persistent_queue` | boolean | `true` | `false`: deliveries that were pending when the daemon stopped are discarded at the next start | restart |
+| `persistent_queue` | boolean | `true` | `false`: deliveries that were pending when the daemon stopped are discarded at the next start | restart (reported) |
 | `max_attempts` | integer | `10` | Greater than 0. Default attempts per delivery. | reload |
 | `retry_initial_seconds` | integer | `5` | Greater than 0. First retry delay; doubles per attempt. | reload |
 | `retry_max_seconds` | integer | `3600` | Upper bound of the retry delay | reload |
@@ -497,8 +498,8 @@ See [CALLS.md](CALLS.md).
 
 | Field | Type | Default | Valid values and meaning | Applies |
 | --- | --- | --- | --- | --- |
-| `enabled` | boolean | `true` | Serve Prometheus metrics | restart |
-| `path` | string | `"/metrics"` | Must start with `/` | restart |
+| `enabled` | boolean | `true` | Serve Prometheus metrics | restart (reported) |
+| `path` | string | `"/metrics"` | Must start with `/` | restart (reported) |
 
 ### [security]
 
@@ -523,9 +524,11 @@ profile with the id `default`.
 **Several SIMs:** `[[sims]]` entries with the sub-tables `[sims.network]`, `[sims.identity]`
 and `[sims.limits]`. Without an `id`, entries are named `sim-1`, `sim-2`, ... in file order.
 
-When to expect changes: quotas (`[limits]`), `mobile_number` and the descriptive fields apply
-on reload. `pin`, `pin_enabled`, `pin_max_attempts`, `smsc`, `iccid` and everything under
-`[network]` are read when the modem connects: reload, then run `modem reconnect`.
+When to expect changes: everything applies with a reload. `pin`, `pin_enabled`,
+`pin_max_attempts`, `smsc`, `iccid` and the settings under `[network]` take effect when the
+modem connects; a reload that changes the SIM profile bound to a connected modem makes that
+modem reconnect automatically within a few seconds. (Any change to the bound profile does,
+including a changed limit or description.)
 
 ### [sim] / [[sims]]
 
@@ -692,8 +695,10 @@ number = "+4500000001"
 | `[[contact]] number` | string | Required |
 
 Matching: first by exact or prefix match (numbers are normalised: separators removed, a
-leading `00` becomes `+`; names compare case-insensitively), then by the last eight digits, so
-that national and international notations of the same number both match.
+leading `00` becomes `+`; names compare case-insensitively), then by the last eight digits
+when at least one of the two numbers is in national notation (no leading `+`), so that
+national and international notations of the same number both match. Two numbers that both
+carry an international prefix must be identical.
 
 Names appear in the dashboard, in the API (`sender_name`, `recipient_name`) and in
 integration messages (`{{message.sender_display}}` renders as `Name (+number)`).
@@ -708,7 +713,8 @@ Optional. Applies on reload. Install with mode `0640`.
 | `label` | string | `"Anonymous"` | Text shown in place of an anonymised number; must not be empty |
 | `redact_body` | boolean | `false` | Also withhold the message text of these numbers from integrations |
 
-Exact entries also match by the last eight digits, like the address book. See
+Exact entries also bridge national and international notation by the last eight digits,
+like the address book; two international numbers must be identical. See
 [INTEGRATIONS.md](INTEGRATIONS.md#anonymisation) for what is and is not hidden.
 
 ## smsgateway.env

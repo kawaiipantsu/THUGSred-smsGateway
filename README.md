@@ -12,8 +12,8 @@ through a REST API, a command-line tool and an embedded web dashboard.
 - Binary: `thugsred-smsgateway` · Service: `thugsred-smsgateway.service`
 
 > **Status: 0.1.0, first release.** The automated test suite runs against a built-in software
-> modem. Real-hardware verification so far covers one module and stops short of sending or
-> receiving SMS over the air. Read [Project status](#project-status) before relying on it.
+> modem. Real-hardware verification so far covers one module and, for SMS traffic, only
+> single-part GSM 7-bit messages. Read [Project status](#project-status) before relying on it.
 
 ## Table of contents
 
@@ -72,10 +72,11 @@ Nothing is sent to any outside service unless you enable an integration.
 | Automated tests | Run entirely against the built-in software modem simulator and SQLite. The same suite was also run against MariaDB 10.11.11, MariaDB 11.4 and MySQL 8.4. |
 | Real hardware | One module: a Waveshare GSM/GPRS/GNSS HAT (SIMCom SIM868, firmware `1418B05SIM868M32_BT`) attached through its USB port (CP2102 USB-UART bridge) to an x86_64 Debian host |
 | Verified on that module | Serial connection and AT handshake, identification, profile auto-detection (`simcom-2g`), capability detection, SIM ready detection, network registration, operator and signal reading, SMS storage query, and the "module powered off" hint. The gateway also ran against it as the installed systemd service with a MariaDB 10.11 database behind an nginx reverse proxy. With GNSS enabled the receiver power-on command was accepted and the capability reported as `supported`, but no position fix was obtained. |
-| Dashboard | Exercised in headless Chromium against the simulator only (not Firefox; not with real inbound messages, calls or recordings) |
-| Not verified on real hardware | Sending and receiving SMS over the air, delivery reports from a real network, USSD, calls and auto-answer, call recording, GNSS positions, MMS retrieval, more than one physical modem, any Quectel or SIMCom LTE module, running on a Raspberry Pi or any ARM64 machine, Raspberry Pi GPIO UART wiring |
+| Verified on that module over a real mobile network | Receiving a single-part GSM 7-bit SMS, including national characters (å ø æ), with persist-then-delete from SIM storage; sending a single-part GSM 7-bit SMS from the dashboard; reception and correlation of the delivery report for that message |
+| Dashboard | Exercised in headless Chromium against the simulator (not Firefox; not with calls or recordings), and used to send the one real message mentioned above |
+| Not verified on real hardware | UCS-2, multipart, binary and flash messages, USSD, calls and auto-answer, call recording, GNSS position fixes, MMS, more than one physical modem, any Quectel or SIMCom LTE module, running on a Raspberry Pi or any ARM64 machine, Raspberry Pi GPIO UART wiring |
 
-Treat everything in the second half of that table as simulator-tested only until you have
+Treat everything in the last row of that table as simulator-tested only until you have
 tried it on your own hardware. Compatibility reports are welcome; see
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -88,12 +89,12 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 
 | Feature | Status | Notes |
 | --- | --- | --- |
-| Receive SMS (PDU mode) | ✅ | Simulator-tested; not yet verified over the air |
-| Send SMS (PDU mode) | ✅ | Simulator-tested; not yet verified over the air |
-| GSM 7-bit and UCS-2 with automatic selection | ✅ | |
-| Multipart send and receive | ✅ | Out-of-order parts, duplicates and reference reuse are handled |
-| Flash (class 0) and 8-bit binary SMS with application ports | ✅ | |
-| Delivery reports correlated with sent messages | ✅ | Not yet verified against a real network |
+| Receive SMS (PDU mode) | ✅ | Single-part GSM 7-bit reception verified on a SIM868 over a real network |
+| Send SMS (PDU mode) | ✅ | Single-part GSM 7-bit sending verified on a SIM868 over a real network |
+| GSM 7-bit and UCS-2 with automatic selection | ✅ | UCS-2 not yet verified on real hardware |
+| Multipart send and receive | ✅ | Out-of-order parts, duplicates and reference reuse are handled. Not yet verified on real hardware. |
+| Flash (class 0) and 8-bit binary SMS with application ports | ✅ | Not yet verified on real hardware |
+| Delivery reports correlated with sent messages | ✅ | Verified for one single-part message on a SIM868 over a real network |
 | Scheduled sending, priorities, expiry, cancel and retry | ✅ | |
 | Idempotent submission (`Idempotency-Key`) | ✅ | |
 | Per-SIM daily/monthly quotas, rate limits, allow and block lists | ✅ | |
@@ -206,7 +207,7 @@ identification, or set with `modem.profile`.
 
 | Profile | Intended for | Real-hardware status |
 | --- | --- | --- |
-| `simcom-2g` | SIMCom SIM800 series, SIM868, SIM808, SIM900 | 🔌 One SIM868 checked: connection, identification, profile detection, capabilities, SIM ready, registration, operator, signal, storage query. SMS traffic unverified. |
+| `simcom-2g` | SIMCom SIM800 series, SIM868, SIM808, SIM900 | 🔌 One SIM868 checked: connection, identification, profile detection, capabilities, SIM ready, registration, operator, signal, storage query, and single-part GSM 7-bit receive, send and delivery report over a real network. Everything else unverified. |
 | `simcom-lte` | SIMCom SIM7600 / SIM7500, A7600 / A767x, SIM7000 / SIM7070 / SIM7080 | 🔌 Unverified: no module of this family has been tested |
 | `quectel` | Quectel EC2x, EG2x, EM0x, BG9x, EG9x, UC20, M95, M66, MC60 | 🔌 Unverified: no module of this family has been tested |
 | `generic` | Any modem following 3GPP TS 27.005 / 27.007 | 🔌 Unverified on real hardware; used as the fallback |
@@ -272,7 +273,7 @@ Notes:
   the secrets file `smsgateway.env` by root only, so run the tool with `sudo` as in the alias
   above. Run `doctor` and the `db` commands only after the service has started once (they
   open the database directly, and a database file created by root would not be writable by
-  the service), and restore backups as the service account; see
+  the service); see
   [docs/INSTALLATION.md](docs/INSTALLATION.md#running-the-command-line-tool).
 - The default API address is `http://<host>:8080/`, reachable from loopback and private
   address ranges only, **without authentication**. See
@@ -772,13 +773,13 @@ sudo $BIN db backup            # online, verified, SQLite only
 sudo $BIN db verify /opt/THUGSred-smsGateway/backups/messages-<timestamp>.db
 
 sudo systemctl stop thugsred-smsgateway
-sudo -u thugsred-smsgateway $BIN db restore \
-    /opt/THUGSred-smsGateway/backups/messages-<timestamp>.db --yes
+sudo $BIN db restore /opt/THUGSred-smsGateway/backups/messages-<timestamp>.db --yes
 sudo systemctl start thugsred-smsgateway
 ```
 
 `db restore` keeps the previous database next to the restored one as
-`messages.db.before-restore-<timestamp>`. MySQL/MariaDB procedures and details:
+`messages.db.before-restore-<timestamp>` and gives the restored file to the owner of its
+directory. `make restore BACKUP=...` does the stop, restore and start for you. MySQL/MariaDB procedures and details:
 [docs/BACKUP-RESTORE.md](docs/BACKUP-RESTORE.md).
 
 ## Upgrading

@@ -625,9 +625,10 @@ to the gateway still shows the gateway's own number as recipient.
 - **Fields outside `message` and `call`.** Other event data is passed through unchanged; for
   example a `ussd.response` text is forwarded as received.
 - **Routing metadata** such as `modem_id`, `sim_id` and timestamps.
-- The numbers on the global list are matched exactly, by prefix (`"+45*"`), or by the last
-  eight digits for exact entries, so that national and international notations of the same
-  number are both covered.
+- The numbers on the global list are matched exactly, by prefix (`"+45*"`), or, for exact
+  entries, by the last eight digits when one of the two numbers is in national notation, so
+  that national and international notations of the same number are both covered. Two
+  numbers that both carry an international prefix must be identical.
 
 Filters and routing rules run before anonymisation and therefore still work on the real
 sender.
@@ -653,7 +654,8 @@ Effects:
 
 Names are withheld from an integration whenever the number is anonymised for it. National
 and international notations of the same number both match (comparison by the last eight
-digits when there is no exact match).
+digits when there is no exact match and at least one of the numbers has no international
+prefix; two international numbers must be identical).
 
 ## Webhook signatures
 

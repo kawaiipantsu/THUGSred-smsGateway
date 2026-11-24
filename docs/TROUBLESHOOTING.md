@@ -138,14 +138,14 @@ To watch the conversation: `general.log_level = "trace"`, reload, and follow `sy
 
 | State / message | Cause | Fix |
 | --- | --- | --- |
-| `SIM_LOCKED`, "SIM requires a PIN and none is configured" | The SIM asks for a PIN | Set `pin` and `pin_enabled = true` in `sim.conf`, reload, then `modem reconnect` |
-| `SIM_LOCKED`, "SIM PIN rejected" | The configured PIN is wrong | **Do not just retry.** Correct the PIN in `sim.conf`, reload, run `modem reset-pin-counter`, then `modem reconnect`. Each attempt uses one of the SIM's remaining tries. |
+| `SIM_LOCKED`, "SIM requires a PIN and none is configured" | The SIM asks for a PIN | Set `pin` and `pin_enabled = true` in `sim.conf` and reload; the modem reconnects on its own |
+| `SIM_LOCKED`, "SIM PIN rejected" | The configured PIN is wrong | **Do not just retry.** Correct the PIN in `sim.conf`, run `modem reset-pin-counter`, then reload (the changed SIM profile makes the modem reconnect). Each attempt uses one of the SIM's remaining tries. |
 | `SIM_LOCKED`, "SIM PIN was rejected earlier; not trying again" | The attempt counter has reached `pin_max_attempts`; the gateway protects the SIM | As above |
 | `SIM_LOCKED`, "SIM is blocked and requires the PUK" | Too many wrong PINs | Put the SIM into a phone and unblock it with the PUK from your operator. The gateway never enters a PUK. |
 | `DEGRADED`, "SIM not usable" | No SIM, badly seated, or not detected | Power the module off, reseat the SIM, power on |
 | `DEGRADED`, "SIM did not become ready after PIN entry" | The SIM is slow after unlock | Nothing; it is re-checked with every health check |
 | "cannot record PIN attempt; not entering PIN" | Database unavailable | Fix the database; the PIN is entered at a later check |
-| PIN changed in `sim.conf` but nothing happens | SIM settings are read when the modem connects | `modem reconnect` after the reload |
+| PIN changed in `sim.conf` but nothing happens | No reload yet, the reload was rejected, or the PIN attempt counter is still at its limit | Reload and check `GET /api/v1/config/status`; run `modem reset-pin-counter` |
 
 Simplest long-term fix when you do not need the PIN: disable the PIN request on the SIM
 using a phone.
@@ -159,8 +159,8 @@ using a phone.
 | Registration `denied` | SIM not activated, barred, or not allowed on this network | Check the subscription with the operator; test the SIM in a phone |
 | Registration `unknown`, signal `null` | Modem does not report it | Check the antenna; look at `modem health` over time |
 | Registered, weak signal (`doctor` warns below 30 %) | Antenna position | Move the antenna; avoid metal enclosures |
-| State `READY`, registration `roaming`, messages stay `queued` with history "deferred: modem not ready: SIM is roaming and network.roaming_enabled is false in sim.conf" | Roaming is blocked by default | If roaming charges are acceptable: `roaming_enabled = true` in the SIM's network section, reload, `modem reconnect` |
-| Manual operator selection has no effect | `selection = "manual"` needs `operator_code` (numeric MCC+MNC) | Set both; reload; `modem reconnect` |
+| State `READY`, registration `roaming`, messages stay `queued` with history "deferred: modem not ready: SIM is roaming and network.roaming_enabled is false in sim.conf" | Roaming is blocked by default | If roaming charges are acceptable: `roaming_enabled = true` in the SIM's network section and reload (the modem reconnects on its own) |
+| Manual operator selection has no effect | `selection = "manual"` needs `operator_code` (numeric MCC+MNC) | Set both and reload (the modem reconnects on its own) |
 | `preferred_network` ignored, warning "profile cannot select the preferred network type" | The profile has no `[network_modes]` | Use a profile that has, or add the command through a custom profile |
 
 ## Messages stuck in the queue
@@ -204,10 +204,10 @@ Other outbound symptoms:
 | `429 limit_reached` on submission | Queue full (`security.max_outbound_queue_size`) or quota exhausted for a pinned message | Clear the backlog; check why it is not draining |
 | `403 forbidden` "destination is not on the allowlist" / "is blocked" | `security.destination_allowlist` / `destination_blocklist` | Adjust the lists |
 | `400` "message needs N parts, limit is M" | Longer than `sms.max_message_parts` | Shorten, or raise the limit |
-| `400` "no configured SIM has the gateway number" | `from` does not match any SIM profile's `mobile_number` bound with `sim =` | Fix `mobile_number` or use `modem` |
+| `400` "no configured SIM has the gateway number" | `from` does not match the `mobile_number` of the SIM profile bound to any enabled modem | Fix `mobile_number` or use `modem` |
 | Every submission fails with `+CMS ERROR: ...` | Network-side rejection (for example no service centre number, barred, no credit) | Check `GET /api/v1/sim` for the detected SMSC; set `smsc` in `sim.conf` if it is empty; test the SIM in a phone |
 | After a restart, a message is `submission_unknown` | The daemon stopped while a part was being transmitted | Same decision as above |
-| A message sent through the raw PDU endpoint stays `processing` and cannot be deleted | The API request timed out (`api.request_timeout_seconds`) before the modem answered; such messages have no queue entry | Avoid by keeping `modem.message_timeout_seconds` below the request timeout when using raw PDUs; the record has to be corrected in the database by hand |
+| `504 timeout` from the raw PDU endpoint | The modem took longer than `api.request_timeout_seconds` to answer. The submission continues in the background and its outcome is always recorded. | Do not resend blindly: read the outcome from `GET /api/v1/messages?type=raw_pdu` or the message's status |
 
 ## Messages are not received
 
@@ -286,8 +286,8 @@ the modem is retried in the background.
 | `thugsred-smsgateway reload` prints the list of errors (HTTP `422`, `invalid_configuration`) | The new configuration is invalid | Fix the listed fields. **The previous configuration is still active**; nothing was half-applied. |
 | `systemctl reload` succeeds but nothing changed | SIGHUP always "succeeds" for systemd; the rejection is in the log | `journalctl -u thugsred-smsgateway -n 20`, or `GET /api/v1/config/status` (`last_reload_error`) |
 | Reload accepted, a setting has no effect, `restart required for: ...` is printed | The setting only applies after a restart | `sudo systemctl restart thugsred-smsgateway` |
-| Reload accepted, a setting has no effect, nothing is printed | A few restart-only settings are not reported: `api.max_request_size_kb`, `api.request_timeout_seconds`, `web.enabled`, `metrics.enabled`, `metrics.path`, `integrations.persistent_queue`; modem profile files | Restart |
-| SIM PIN, SMSC, roaming or operator change has no effect | Read when the modem connects | `modem reconnect` |
+| Reload accepted, a changed modem profile file has no effect | Profile files are read at startup only and are not part of the restart report | Restart |
+| SIM PIN, SMSC, roaming or operator change has no effect | Applied when the modem connects; a reload that changes the bound SIM profile reconnects the modem within a few seconds | Check that the reload was accepted and that the modem is bound to the profile you edited (`modem info`) |
 | New value in `smsgateway.env` not picked up | systemd reads environment files at start only | Restart |
 | A warning about an unknown key | Typo in a key or section name; the setting was ignored | Correct it |
 

@@ -24,7 +24,8 @@ the automated tests against the software simulator, or not tested at all.
 Hardware checked: Waveshare GSM/GPRS/GNSS HAT with a SIMCom SIM868 (firmware
 `1418B05SIM868M32_BT`), attached through its USB port (CP2102 USB-UART bridge) to an x86_64
 Debian host. On that module the gateway also ran as the installed systemd service, with a
-MariaDB 10.11 database and behind an nginx reverse proxy.
+MariaDB 10.11 database and behind an nginx reverse proxy, and exchanged SMS over a real
+mobile network as far as the table says.
 
 | Function | SIM868 (real module) | Simulator | SIMCom LTE, Quectel, other modems |
 | --- | --- | --- | --- |
@@ -37,9 +38,10 @@ MariaDB 10.11 database and behind an nginx reverse proxy.
 | Network registration, operator, signal | verified | tested | unverified |
 | SMS storage query | verified | tested | unverified |
 | "Module powered off" hint | verified | tested | unverified |
-| Receiving SMS | unverified | tested | unverified |
-| Sending SMS | unverified | tested | unverified |
-| Delivery reports | unverified | tested | unverified |
+| Receiving SMS, single-part GSM 7-bit (including national characters å ø æ), with persist-then-delete from SIM storage | verified | tested | unverified |
+| Sending SMS, single-part GSM 7-bit (from the dashboard) | verified | tested | unverified |
+| Delivery report reception and correlation (for that one message) | verified | tested | unverified |
+| UCS-2, multipart, binary and flash messages | unverified | tested | unverified |
 | USSD | unverified | tested | unverified |
 | Call detection, auto-answer | unverified | tested | unverified |
 | Call recording | unverified | not applicable (needs audio hardware) | unverified |
@@ -72,14 +74,15 @@ are compiled into the binary:
 
 1. the first profile one of whose `models` entries is a case-insensitive substring of the
    model identification;
-2. otherwise the first profile that lists **no** models and whose `manufacturers` entry is a
-   substring of the manufacturer identification;
+2. otherwise, for an unknown model, the profile whose `manufacturers` entry is a substring of
+   the manufacturer identification, **when exactly one profile matches**;
 3. otherwise `generic`.
 
-All built-in vendor profiles list models, so for them only rule 1 applies: a SIMCom or
-Quectel module whose model is not in the list gets the `generic` profile. Set `modem.profile`
-explicitly, or add a custom profile, for such modules. A configured profile name that does
-not exist falls back to auto-detection.
+With the built-in profiles this means: an unlisted Quectel model gets the `quectel` profile,
+because only one profile names that manufacturer. An unlisted SIMCom model gets `generic`,
+because two profiles (`simcom-2g` and `simcom-lte`) name SIMCom and the gateway does not
+guess between them; set `modem.profile` explicitly, or add a custom profile, for such
+modules. A configured profile name that does not exist falls back to auto-detection.
 
 The selected profile is shown as `profile` in `modem info` and `GET /api/v1/modem`, and the
 available names in `GET /api/v1/capabilities` (`gateway.modem_profiles`).
@@ -90,7 +93,7 @@ available names in `GET /api/v1/capabilities` (`gateway.modem_profiles`).
 | --- | --- | --- | --- |
 | `name` | string | `"generic"` | Profile name. A directory profile with the name of a built-in one replaces it. |
 | `description` | string | empty | Free text |
-| `manufacturers` | list of strings | `[]` | Case-insensitive substrings of the manufacturer identification (see the selection rules) |
+| `manufacturers` | list of strings | `[]` | Case-insensitive substrings of the manufacturer identification; used for models that no profile lists (see the selection rules) |
 | `models` | list of strings | `[]` | Case-insensitive substrings of the model identification |
 | `init_commands` | list of strings | `[]` | AT commands sent after capability detection, before `modem.init_commands` |
 | `cnmi` | list of strings | `["2,1,0,1,0", "2,1,0,0,0", "1,1,0,0,0"]` | `AT+CNMI=` parameter sets tried in order until the modem accepts one. If none is accepted the gateway relies on periodic polling. |
@@ -322,12 +325,14 @@ A SIM profile from `sim.conf` is bound to a modem in this order:
 3. **Implicitly**, when exactly one modem and exactly one SIM profile are configured.
 
 The bound profile supplies the PIN, SMSC, network selection and roaming policy for the
-connection and is shown as `sim.profile` in `modem info`.
+connection and is shown as `sim.profile` in `modem info`. The binding made at
+initialisation is recorded, and quotas (`[limits]`), the `from` selector and the sender
+stored with outbound messages use that recorded binding, whether it was made by `sim =` or
+by ICCID. Before a modem has completed its first initialisation, the configured binding
+(rules 2 and 3) is used.
 
-Recommendation for several modems: always set `sim =` on each `[[modems]]` entry, and add
-`iccid` if you want the gateway to follow a SIM that is moved. Quotas (`[limits]`) and the
-`from` selector are evaluated through the configured binding (rules 2 and 3) only, so a SIM
-that is bound solely by ICCID has no quota enforcement and cannot be selected with `from`.
+Recommendation for several modems: set `sim =` on each `[[modems]]` entry, and add `iccid`
+if you want the gateway to follow a SIM that is moved.
 
 The classic single-SIM layout (`[sim]`, `[network]`, `[identity]`, `[limits]`) defines a
 profile with the id `default`. `[[sims]]` entries without an `id` are named `sim-1`, `sim-2`,
@@ -337,8 +342,9 @@ profile with the id `default`. `[[sims]]` entries without an `id` are named `sim
 outbound and the recipient of inbound messages, and used by `from`. It does not change the
 number recipients see.
 
-PIN, SMSC, network selection and roaming settings are read when a modem connects. After
-changing them, reload the configuration and run `thugsred-smsgateway modem reconnect`.
+PIN, SMSC, network selection and roaming settings are applied when a modem connects. A
+reload that changes the SIM profile bound to a connected modem is detected within a few
+seconds and makes that modem reconnect on its own.
 
 ## SIM PIN and PUK policy
 
@@ -366,9 +372,8 @@ Details:
 After correcting the PIN in `sim.conf`:
 
 ```sh
-sudo systemctl reload thugsred-smsgateway
 thugsred-smsgateway modem reset-pin-counter        # optionally --modem <id>
-thugsred-smsgateway modem reconnect
+sudo systemctl reload thugsred-smsgateway          # the changed SIM profile reconnects the modem
 ```
 
 `reset-pin-counter` (an administrative API call, `POST /api/v1/modem/reset-pin-counter`)

@@ -290,10 +290,12 @@ Metrics never use telephone numbers or message content as labels.
   the host warrants it, and retention settings.
 - The database keeps real numbers and full text regardless of anonymisation settings, which
   apply to integrations and logs only.
-- **Deleting a message does not delete the events emitted for it.** The `events` table keeps
-  the message data until `retention.integration_event_days` has passed, and
-  `GET /api/v1/events` returns it. The same applies to `sms.store_sent_messages = false`.
-  See [DATABASE.md](DATABASE.md#retention).
+- **Events carry message content.** The `events` table keeps the message data until
+  `retention.integration_event_days` has passed, and `GET /api/v1/events` returns it.
+  Deleting a message through the API also deletes the events that reference it and their
+  delivery records. Message retention (`message_days`) and
+  `sms.store_sent_messages = false` do not touch events. See
+  [DATABASE.md](DATABASE.md#retention).
 - Backups contain everything the database contains. Store them accordingly.
 - Recording file names carry no caller information (`call-<random id>.wav`).
 - Downloads are served only from inside `paths.recordings` and `paths.attachments`, after
@@ -331,8 +333,9 @@ How quotas are enforced, and their limits:
   a new quota period or expires.
 - The count is the number of segments the modem submitted since the start of the day or
   month, taken from the database.
-- Quotas need a **configured** SIM binding: `sim =` on the modem entry, or the single-modem,
-  single-SIM case. A SIM that is bound only by ICCID is not quota-checked.
+- Quotas apply to the SIM profile the modem actually bound at its last initialisation, by
+  `sim =` or by ICCID (before the first initialisation, the configured binding). A modem
+  with no bound profile has no quota.
 - Raw PDU submission bypasses the queue and therefore the rate limit and the quotas (it
   still counts towards later quota checks). One more reason to leave it disabled.
 - With a `retention.message_days` shorter than a month the monthly count undercounts.

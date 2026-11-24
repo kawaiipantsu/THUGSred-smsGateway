@@ -196,9 +196,8 @@ Guidance:
   has ever started, the service cannot write to the file afterwards. Start the service once
   first, or fix the ownership with
   `sudo chown thugsred-smsgateway: /var/lib/thugsred-smsgateway/messages.db*`.
-- **Restore as the service account** (`sudo -u thugsred-smsgateway ... db restore`), or
-  restore as root and correct the ownership as above; `db restore` copies the backup into
-  place with the ownership of whoever runs it. See [BACKUP-RESTORE.md](BACKUP-RESTORE.md).
+- `db restore` is safe to run as root: it gives the restored file to the owner of the
+  database directory. See [BACKUP-RESTORE.md](BACKUP-RESTORE.md).
 - Commands that only talk to the daemon (`status`, `sms`, `modem`, `integrations`, `ussd`,
   `reload`, `capabilities`, `diagnostics`) still load the configuration first, to find the
   API address and token.
