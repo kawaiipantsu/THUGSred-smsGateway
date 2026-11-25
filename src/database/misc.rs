@@ -1024,7 +1024,7 @@ impl Db {
             )
             .await?;
         let by_category = self.json_rows(
-            "SELECT category AS k, COUNT(*) AS count, AVG(confidence) AS avg_confidence, MAX(confidence) AS max_confidence, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ? GROUP BY category ORDER BY count DESC",
+            "SELECT category AS k, COUNT(*) AS count, CAST(AVG(confidence) AS DOUBLE) AS avg_confidence, MAX(confidence) AS max_confidence, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ? GROUP BY category ORDER BY count DESC",
             params![from],
         ).await?;
         let by_severity = self.json_rows(
@@ -1049,7 +1049,7 @@ impl Db {
         ).await?;
         let overall = self
             .json_rows(
-                "SELECT AVG(confidence) AS avg_confidence, MAX(confidence) AS max_confidence, COUNT(DISTINCT sender) AS distinct_senders, COUNT(DISTINCT recipient) AS targeted_numbers, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ?",
+                "SELECT CAST(AVG(confidence) AS DOUBLE) AS avg_confidence, MAX(confidence) AS max_confidence, COUNT(DISTINCT sender) AS distinct_senders, COUNT(DISTINCT recipient) AS targeted_numbers, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ?",
                 params![from],
             )
             .await?;
