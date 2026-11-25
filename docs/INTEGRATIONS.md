@@ -59,6 +59,8 @@ such as `sms.*`. Unknown names are a configuration error.
 | `sms.multipart_completed` | All parts of a multipart message arrived; emitted in addition to `sms.received` | `message` |
 | `sms.binary_received` | An 8-bit or port-addressed message was stored | `message` |
 | `sms.service_received` | A service message or non-MMS WAP Push was stored (only with `sms.allow_service_messages`) | `message` |
+| `sms.ota_toolkit` | A SIM Toolkit OTA message (S@T/WIB browser push) was received | `message` |
+| `security.sim_attack` | A SIM Toolkit OTA push was received; raised in addition to `sms.ota_toolkit` for honeypot/alerting ([HONEYPOT.md](HONEYPOT.md)) | `message` |
 | `sms.queued` | An outbound message was accepted into the queue | `message` |
 | `sms.sent` | All parts were accepted by the network | `message` |
 | `sms.delivered` | Delivery reports confirmed every part | `message` |

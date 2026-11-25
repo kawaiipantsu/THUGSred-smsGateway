@@ -139,6 +139,12 @@ Messages submitted through the raw PDU endpoint are created as `processing` and 
 | `incomplete` | A multipart message stored with parts missing (timeout or reference reuse); `metadata.missing_parts` lists them and the text shows `[...]` in their place |
 | `malformed` | A PDU that could not be decoded, kept as a raw record with the error text; `message_type` is `unknown` |
 
+Inbound `message_type` is one of `sms`, `flash`, `binary`, `sim_toolkit`, `service`,
+`mms_notification`, `wap_push` or `unknown`. `sim_toolkit` marks a SIM Toolkit OTA message
+(SMS-PP SIM data download, including S@T/WIB browser pushes of the Simjacker/WIBattack class);
+the decoded command packet, its security level and its Toolkit Application Reference are in
+`metadata.sim_toolkit`. See [HONEYPOT.md](HONEYPOT.md).
+
 ### Part states
 
 | State | Used for |

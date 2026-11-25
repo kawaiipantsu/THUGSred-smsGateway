@@ -283,6 +283,7 @@ fn is_public_asset(path: &str) -> bool {
     path == "/"
         || web::is_page(path)
         || path == "/favicon.svg"
+        || path == "/branding/logo"
         || path.starts_with("/assets/")
         || path == "/api/v1/ui/config"
 }
@@ -588,6 +589,7 @@ pub fn router(gw: Arc<Gateway>) -> Router {
         app = app
             .route("/", get(web::index))
             .route("/favicon.svg", get(web::favicon))
+            .route("/branding/logo", get(web::logo))
             .route("/assets/{*path}", get(web::asset));
         for page in web::PAGES {
             app = app.route(&format!("/{page}"), get(web::index));

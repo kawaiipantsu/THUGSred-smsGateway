@@ -20,6 +20,8 @@
 # name = "gatewayapi"
 # type = "gatewayapi"            # gatewayapi.com / gatewayapi.eu
 # enabled = true
+# # Name shown for this route on the dashboard's Send page.
+# display_name = "SMS Gateway"
 #
 # # API token from the provider dashboard.
 # api_token = "replace-with-your-api-token"

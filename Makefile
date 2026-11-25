@@ -127,7 +127,7 @@ upgrade: ## Back up the database, install the new build, migrate and restart
 	@if systemctl is-active --quiet $(SERVICE); then $(SUDO) systemctl restart $(SERVICE) && echo "service restarted"; else echo "service is not running; start it with 'make start'"; fi
 
 config: ## Create missing configuration files from the examples (never overwrites)
-	@for f in smsgateway sim integrations addressbook anonymous providers; do \
+	@for f in smsgateway sim integrations addressbook anonymous providers branding; do \
 		if [ -e '$(CONFDIR)'/$$f.conf ]; then echo "kept $(CONFDIR)/$$f.conf"; \
 		else $(SUDO) install -D -m 0640 config/$$f.conf.example '$(CONFDIR)'/$$f.conf && echo "created $(CONFDIR)/$$f.conf"; fi; done
 

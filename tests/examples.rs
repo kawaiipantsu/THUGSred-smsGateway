@@ -13,6 +13,7 @@ fn load_examples() -> Config {
         ("addressbook.conf.example", "addressbook.conf"),
         ("anonymous.conf.example", "anonymous.conf"),
         ("providers.conf.example", "providers.conf"),
+        ("branding.conf.example", "branding.conf"),
     ] {
         std::fs::copy(src.join(from), dir.path().join(to)).unwrap();
     }
@@ -29,6 +30,7 @@ fn load_examples() -> Config {
         format!("paths.addressbook={}", p("addressbook.conf")),
         format!("paths.anonymous={}", p("anonymous.conf")),
         format!("paths.providers={}", p("providers.conf")),
+        format!("paths.branding={}", p("branding.conf")),
         format!("integrations.config_file={}", p("integrations.conf")),
     ];
     config::load(&o).unwrap_or_else(|e| panic!("{e}"))

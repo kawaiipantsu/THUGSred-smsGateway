@@ -8,11 +8,12 @@ impl Dir {
         let d = tempfile::tempdir().unwrap();
         let p = d.path();
         let main = format!(
-            "{main}\n[paths]\nsim_config = \"{}\"\naddressbook = \"{}\"\nanonymous = \"{}\"\nproviders = \"{}\"\n[integrations]\nconfig_file = \"{}\"\n",
+            "{main}\n[paths]\nsim_config = \"{}\"\naddressbook = \"{}\"\nanonymous = \"{}\"\nproviders = \"{}\"\nbranding = \"{}\"\n[integrations]\nconfig_file = \"{}\"\n",
             p.join("sim.conf").display(),
             p.join("addressbook.conf").display(),
             p.join("anonymous.conf").display(),
             p.join("providers.conf").display(),
+            p.join("branding.conf").display(),
             p.join("integrations.conf").display()
         );
         fs::write(p.join("smsgateway.conf"), main).unwrap();

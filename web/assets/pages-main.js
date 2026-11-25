@@ -278,7 +278,7 @@ export function overview(root) {
 // ---- inbox / outbox / history ---------------------------------------------------------
 
 const STATUSES = ['received', 'queued', 'scheduled', 'processing', 'retrying', 'submitted', 'delivered', 'delivery_failed', 'failed', 'expired', 'cancelled', 'submission_unknown'];
-const TYPES = ['sms', 'flash', 'binary', 'service', 'mms_notification', 'wap_push', 'raw_pdu', 'unknown'];
+const TYPES = ['sms', 'flash', 'binary', 'sim_toolkit', 'service', 'mms_notification', 'wap_push', 'raw_pdu', 'unknown'];
 
 function messagesPage(title, direction) {
   return (root) => {

@@ -26,6 +26,8 @@ pub const KNOWN_EVENTS: &[&str] = &[
     "sms.multipart_completed",
     "sms.binary_received",
     "sms.service_received",
+    "sms.ota_toolkit",
+    "security.sim_attack",
     "mms.notification",
     "mms.received",
     "ussd.response",
@@ -432,6 +434,7 @@ pub fn load(opts: &LoadOptions) -> Result<Config, ConfigError> {
         addressbook: cfg.paths.addressbook.clone(),
         anonymous: cfg.paths.anonymous.clone(),
         providers: cfg.paths.providers.clone(),
+        branding: cfg.paths.branding.clone(),
     };
     if sim_path.exists() {
         check_permissions(&sim_path, &mut warnings);
@@ -501,6 +504,18 @@ pub fn load(opts: &LoadOptions) -> Result<Config, ConfigError> {
                         "{file}: provider must be an array of tables ([[provider]])"
                     )),
                 }
+            }
+            Err(e) => errors.push(e),
+        }
+    }
+
+    // Dashboard branding (optional).
+    let brand_path = PathBuf::from(&cfg.paths.branding);
+    if brand_path.exists() {
+        match read_toml(&brand_path) {
+            Ok(v) => {
+                let label = format!("{}: branding", cfg.paths.branding);
+                cfg.branding = from_value(&v, &label, "branding", &mut errors, &mut warnings);
             }
             Err(e) => errors.push(e),
         }
@@ -813,6 +828,82 @@ pub fn valid_sender_name(sender: &str) -> Result<(), String> {
     Ok(())
 }
 
+fn hex_colour(v: &str) -> bool {
+    v.len() == 7 && v.starts_with('#') && v[1..].chars().all(|c| c.is_ascii_hexdigit())
+}
+
+/// Image types a logo may have, with their media types.
+pub fn logo_media_type(path: &str) -> Option<&'static str> {
+    match path.rsplit('.').next()?.to_ascii_lowercase().as_str() {
+        "png" => Some("image/png"),
+        "svg" => Some("image/svg+xml"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp" => Some("image/webp"),
+        "gif" => Some("image/gif"),
+        _ => None,
+    }
+}
+
+fn validate_branding(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
+    let b = &cfg.branding;
+    one_of(
+        errors,
+        "branding.theme",
+        &b.theme,
+        &["", "dark", "light", "auto"],
+    );
+    for (field, value) in [
+        ("branding.accent_color", &b.accent_color),
+        ("branding.logo_background", &b.logo_background),
+    ] {
+        if !value.is_empty() && !hex_colour(value) {
+            errors.push(format!("{field}: must be a colour such as \"#e02424\""));
+        }
+    }
+    for (field, value, max) in [
+        ("branding.title", &b.title, 80),
+        ("branding.subtitle", &b.subtitle, 120),
+        ("branding.footer.company", &b.footer.company, 120),
+        ("branding.footer.contact_name", &b.footer.contact_name, 120),
+        (
+            "branding.footer.contact_email",
+            &b.footer.contact_email,
+            200,
+        ),
+        ("branding.footer.text", &b.footer.text, 300),
+    ] {
+        if value.chars().count() > max || value.chars().any(char::is_control) {
+            errors.push(format!(
+                "{field}: is limited to {max} characters on one line"
+            ));
+        }
+    }
+    let mail = &b.footer.contact_email;
+    if !mail.is_empty()
+        && (!mail.contains('@')
+            || mail
+                .chars()
+                .any(|c| c.is_whitespace() || "<>\"'".contains(c)))
+    {
+        errors.push("branding.footer.contact_email: is not an e-mail address".into());
+    }
+    if !b.footer.website.is_empty() && !valid_http_url(&b.footer.website) {
+        errors.push("branding.footer.website: must be an http(s) URL".into());
+    }
+    if !b.logo.is_empty() {
+        if !Path::new(&b.logo).is_absolute() {
+            errors.push("branding.logo: must be an absolute path".into());
+        } else if logo_media_type(&b.logo).is_none() {
+            errors.push("branding.logo: must be a png, svg, jpg, webp or gif file".into());
+        } else if !Path::new(&b.logo).is_file() {
+            warnings.push(format!(
+                "branding.logo: {} does not exist or is not readable; the built-in logo is shown",
+                b.logo
+            ));
+        }
+    }
+}
+
 fn validate_providers(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
     let mut names = HashSet::new();
     for p in &cfg.providers {
@@ -841,6 +932,9 @@ fn validate_providers(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec
         positive(errors, &format!("{f}.timeout_seconds"), p.timeout_seconds);
         if !p.base_url.is_empty() && !valid_http_url(&p.base_url) {
             errors.push(format!("{f}.base_url: must be an http(s) URL"));
+        }
+        if p.display_name.chars().count() > 40 || p.display_name.chars().any(char::is_control) {
+            errors.push(format!("{f}.display_name: is limited to 40 characters"));
         }
         if p.label.chars().count() > 128 {
             errors.push(format!("{f}.label: is limited to 128 characters"));
@@ -1185,7 +1279,13 @@ fn validate(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) 
     {
         warnings.push("api: authentication is disabled and allowed_cidrs admits every address; never expose this API to the public internet".into());
     }
-    one_of(errors, "web.theme", &cfg.web.theme, &["dark", "light"]);
+    one_of(
+        errors,
+        "web.theme",
+        &cfg.web.theme,
+        &["dark", "light", "auto"],
+    );
+    validate_branding(cfg, errors, warnings);
     positive(
         errors,
         "web.refresh_interval_seconds",

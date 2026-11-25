@@ -1,0 +1,37 @@
+# THUGSred-smsGateway - dashboard branding (optional)
+#
+# Gives the dashboard your own name, logo, colours and footer. Every value
+# is optional; an empty value keeps the built-in default. Apply changes with:
+#   sudo systemctl reload thugsred-smsgateway
+#
+# See docs/CONFIGURATION.md (branding.conf).
+
+# Product name in the header and in page titles. Empty uses web.title.
+title = ""
+# Smaller line below the name.
+subtitle = ""
+
+# Square logo image: png, svg, jpg, webp or gif, at most 2 MB. It must be
+# readable by the service user, for example /etc/thugsred/branding/logo.png.
+# It is also used as the browser tab icon.
+logo = ""
+# Colour of the tile behind the logo, for logos made for a dark background.
+# Empty is transparent.
+logo_background = ""
+
+# Default colour theme: "dark", "light" or "auto" (follow the browser).
+# Empty uses web.theme. A viewer can still switch in the browser.
+theme = ""
+# Accent colour as #rrggbb. Empty keeps the built-in red.
+accent_color = ""
+
+[footer]
+company = ""
+contact_name = ""
+contact_email = ""
+# Link shown in the footer.
+website = ""
+# Free text, for example a legal notice.
+text = ""
+# Small link to the THUGSred-smsGateway project.
+show_project_link = true

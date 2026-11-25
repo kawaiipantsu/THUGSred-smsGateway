@@ -37,7 +37,7 @@ const PAGE: &[&str] = &["limit:Page size (1-500, default 50)", "offset:Rows to s
 const MODEM: &[&str] = &["modem:Modem id (default: first modem)"];
 const FILTERS: &[&str] = &[
     "direction:inbound or outbound",
-    "type:Message type (sms, flash, binary, service, mms_notification, wap_push, unknown)",
+    "type:Message type (sms, flash, binary, sim_toolkit, service, mms_notification, wap_push, unknown)",
     "status:Message status",
     "sender:Sender contains",
     "recipient:Recipient contains",

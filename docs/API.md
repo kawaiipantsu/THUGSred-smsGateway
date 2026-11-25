@@ -584,7 +584,7 @@ curl -sS -X POST http://127.0.0.1:8080/api/v1/sms/send-pdu \
 | Parameter | Meaning |
 | --- | --- |
 | `direction` | `inbound` or `outbound` |
-| `type` | `sms`, `flash`, `binary`, `service`, `mms_notification`, `wap_push`, `raw_pdu`, `unknown` |
+| `type` | `sms`, `flash`, `binary`, `sim_toolkit`, `service`, `mms_notification`, `wap_push`, `raw_pdu`, `unknown` |
 | `status` | Exact message status ([DATABASE.md](DATABASE.md#message-states)) |
 | `sender`, `recipient` | Substring match, at most 200 characters |
 | `modem` | Modem id |

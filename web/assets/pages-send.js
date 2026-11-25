@@ -91,6 +91,11 @@ export function send(root) {
   let shown = [];        // suggestions on screen
 
   const provider = () => providers.find((p) => p.name === via);
+  // Several providers with the same label are told apart by their identifier.
+  const routeName = (p) => {
+    const label = p.display_name || 'SMS Gateway';
+    return providers.filter((x) => (x.display_name || 'SMS Gateway') === label).length > 1 ? `${label} (${p.name})` : label;
+  };
   const simOf = (id) => sims.find((x) => x.modem === id);
   const simNumber = (x) => (x && x.configured && x.configured.mobile_number) || 'SIM number not configured';
 
@@ -107,7 +112,7 @@ export function send(root) {
 
   function drawRoute() {
     const opts = [['', 'signal', 'Modem', sims.length === 1 ? simNumber(sims[0]) : 'SIM number']]
-      .concat(providers.map((p) => [p.name, 'cloud', p.name, 'sender name']));
+      .concat(providers.map((p) => [p.name, 'cloud', routeName(p), 'sender name']));
     fill(routeBar, opts.map(([value, ico, label, hint]) => h('button', {
       type: 'button', class: 'seg-btn', role: 'radio', 'aria-checked': String(via === value),
       onclick: () => {
@@ -277,9 +282,38 @@ export function send(root) {
   const when = h('input', { type: 'datetime-local' });
   const flash = check('Flash SMS (shown at once, usually not stored)');
   flash.input.addEventListener('change', estimate);
+  // Application-layer binary / value-added service payload (handset-facing;
+  // delivered to an on-device app or service over WDP/WAP ports).
+  const format = select([['text', 'Text message'], ['binary', 'Binary payload (8-bit)']]);
+  const hexInput = h('textarea', { class: 'mono', rows: 3, placeholder: '0A 1B 2C …', 'aria-label': 'Binary payload (hex)', spellcheck: 'false' });
+  const dstPort = h('input', { type: 'number', min: 0, max: 65535, placeholder: 'e.g. 9200' });
+  const srcPort = h('input', { type: 'number', min: 0, max: 65535, placeholder: 'optional' });
+  const hexBytes = () => hexInput.value.replace(/\s+/g, '');
+  const isBinary = () => format.value === 'binary';
+  const binBox = h('div', { class: 'bin-box' },
+    field('Binary payload (hex)', hexInput, 'Raw 8-bit content for an on-device app or value-added service. Sent through a modem; requires sms.allow_binary.'),
+    h('div', { class: 'cols' }, field('Destination port', dstPort), field('Source port', srcPort)));
+  binBox.hidden = true;
+  function drawFormat() {
+    binBox.hidden = !isBinary();
+    msg.disabled = isBinary();
+    if (isBinary() && via) { via = ''; drawRoute(); }  // providers carry text only
+    if (isBinary()) {
+      const n = hexBytes().length / 2 | 0;
+      fill(stats, `${n} byte${n === 1 ? '' : 's'}`, n > 140 ? h('span', { class: 'bad-text' }, ' — over 140 bytes needs concatenation') : null);
+      meterFill.style.width = Math.min(100, (hexBytes().length / 2 / 140) * 100) + '%';
+    } else {
+      estimate();
+    }
+    drawPreview();
+  }
+  format.addEventListener('change', drawFormat);
+  hexInput.addEventListener('input', drawFormat);
   const options = h('details', { class: 'more' }, h('summary', null, 'Options'),
     h('div', { class: 'cols' }, field('Schedule', when, 'Local time. Empty sends now.'), field('Priority', prio), field('Delivery report', report)),
-    flash.el);
+    flash.el,
+    field('Format', format, 'Text, or a raw binary payload for a value-added / interactive service.'),
+    binBox);
 
   // -- preview --------------------------------------------------------------------
   const pvName = h('strong', null);
@@ -304,8 +338,9 @@ export function send(root) {
     const name = senderShown();
     fill(pvName, name);
     fill(pvAvatar, avatar(name));
-    pvBubble.classList.toggle('empty', !msg.value);
-    fill(pvBubble, msg.value || 'Your message appears here');
+    const binary = isBinary();
+    pvBubble.classList.toggle('empty', binary ? !hexBytes() : !msg.value);
+    fill(pvBubble, binary ? `[binary payload · ${hexBytes().length / 2 | 0} bytes]` : (msg.value || 'Your message appears here'));
     fill(pvMeta, lastEstimate && msg.value ? `${lastEstimate.parts} segment${lastEstimate.parts === 1 ? '' : 's'} · ${String(lastEstimate.encoding).toUpperCase()}` : '');
     const t = currentTo();
     fill(pvTo, t ? ['To ', h('strong', null, recipient ? recipient.name : (known(t) || {}).name || t)] : 'No recipient yet');
@@ -362,22 +397,34 @@ export function send(root) {
   const sendBtn = h('button', { type: 'submit', class: 'btn primary send-btn' }, icon('send'), h('span', null, 'Send'));
   const form = h('form', { class: 'composer card', novalidate: true, onsubmit: async (e) => {
     e.preventDefault();
-    const body = { to: currentTo(), message: msg.value, priority: prio.value };
+    const binary = isBinary();
+    const body = { to: currentTo(), priority: prio.value };
     if (!body.to) {
       to.focus();
       return toast('Choose a contact or enter a number.', 'bad');
     }
-    if (!body.message) {
+    const hex = hexBytes();
+    if (binary) {
+      if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length % 2) {
+        hexInput.focus();
+        return toast('Enter the binary payload as an even number of hex digits.', 'bad');
+      }
+      body.binary = hex;
+      if (dstPort.value !== '') body.destination_port = Number(dstPort.value);
+      if (srcPort.value !== '') body.source_port = Number(srcPort.value);
+    } else if (!msg.value) {
       msg.focus();
       return toast('Write a message.', 'bad');
+    } else {
+      body.message = msg.value;
     }
-    const p = provider();
+    const p = binary ? null : provider();
     if (p) {
       body.provider = p.name;
       if (sender.value.trim()) body.sender_name = sender.value.trim();
       else if (!p.default_sender) return toast('Enter a sender name.', 'bad');
     } else {
-      if (flash.input.checked) body.flash = true;
+      if (!binary && flash.input.checked) body.flash = true;
       if (report.value) body.delivery_report = report.value === 'true';
       if (modem.value) body.modem = modem.value;
     }
@@ -390,12 +437,12 @@ export function send(root) {
     const ok = await confirmBox(body.scheduled_at ? 'Schedule this SMS?' : 'Send this SMS?', [
       kv([
         ['To', recipient ? `${recipient.name} (${recipient.number})` : body.to],
-        ['From', p ? `${senderShown()} (provider ${p.name})` : senderShown()],
+        ['From', p ? `${senderShown()} (via ${routeName(p)})` : senderShown()],
         body.scheduled_at ? ['When', fmtTime(body.scheduled_at)] : null,
-        lastEstimate ? ['Size', `${lastEstimate.parts} segment${lastEstimate.parts === 1 ? '' : 's'}`] : null,
+        binary ? ['Payload', `${hex.length / 2} bytes${body.destination_port != null ? ' · port ' + body.destination_port : ''}`] : lastEstimate ? ['Size', `${lastEstimate.parts} segment${lastEstimate.parts === 1 ? '' : 's'}`] : null,
       ]),
-      h('pre', { class: 'body' }, body.message),
-      h('p', { class: 'muted small-text' }, p ? 'A real SMS is sent through the provider and billed to the provider account.' : 'A real SMS is transmitted through the modem.'),
+      h('pre', { class: 'body' }, binary ? hex.replace(/(..)/g, '$1 ').trim() : body.message),
+      h('p', { class: 'muted small-text' }, binary ? 'A binary service message is transmitted through the modem.' : p ? `A real SMS is sent through ${routeName(p)} and billed to that account.` : 'A real SMS is transmitted through the modem.'),
     ], body.scheduled_at ? 'Schedule' : 'Send');
     if (!ok) return;
     const key = window.crypto && crypto.randomUUID ? crypto.randomUUID() : null;
@@ -403,9 +450,10 @@ export function send(root) {
       const r = await api('/api/v1/sms/send', { method: 'POST', body, headers: key ? { 'Idempotency-Key': key } : {} });
       toast(body.scheduled_at ? 'Message scheduled' : 'Message queued', 'ok');
       msg.value = '';
+      hexInput.value = '';
       lastEstimate = null;
       meterFill.style.width = '0%';
-      fill(stats, '0 characters');
+      fill(stats, binary ? '0 bytes' : '0 characters');
       drawPreview();
       track(r.message_id, label);
     });

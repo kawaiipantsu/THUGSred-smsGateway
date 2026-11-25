@@ -68,8 +68,8 @@ pub fn write_config(dir: &std::path::Path, s: &Setup, mysql: Option<&str>) {
         None => format!("sqlite_path = \"{}\"", p("messages.db")),
     };
     let mut main = format!(
-        "[general]\ninstance_id = \"test-gw\"\nshutdown_timeout_seconds = 5\n[paths]\nhome = \"{}\"\ndata = \"{}\"\nruntime = \"{}\"\nrecordings = \"{}\"\nattachments = \"{}\"\nbackups = \"{}\"\nmodem_profiles = \"{}\"\nsim_config = \"{}\"\naddressbook = \"{}\"\nanonymous = \"{}\"\nproviders = \"{}\"\n[integrations]\nconfig_file = \"{}\"\nretry_initial_seconds = 1\nretry_max_seconds = 2\n[database]\n{db}\n[modem]\npoll_interval_seconds = 1\nhealthcheck_interval_seconds = 1\nreconnect_delay_seconds = 1\nmax_reconnect_delay_seconds = 1\ncommand_timeout_seconds = 2\nmessage_timeout_seconds = 2\n",
-        p("home"), p("data"), p("run"), p("recordings"), p("attachments"), p("backups"), p("profiles"), p("sim.conf"), p("addressbook.conf"), p("anonymous.conf"), p("providers.conf"), p("integrations.conf"),
+        "[general]\ninstance_id = \"test-gw\"\nshutdown_timeout_seconds = 5\n[paths]\nhome = \"{}\"\ndata = \"{}\"\nruntime = \"{}\"\nrecordings = \"{}\"\nattachments = \"{}\"\nbackups = \"{}\"\nmodem_profiles = \"{}\"\nsim_config = \"{}\"\naddressbook = \"{}\"\nanonymous = \"{}\"\nproviders = \"{}\"\nbranding = \"{}\"\n[integrations]\nconfig_file = \"{}\"\nretry_initial_seconds = 1\nretry_max_seconds = 2\n[database]\n{db}\n[modem]\npoll_interval_seconds = 1\nhealthcheck_interval_seconds = 1\nreconnect_delay_seconds = 1\nmax_reconnect_delay_seconds = 1\ncommand_timeout_seconds = 2\nmessage_timeout_seconds = 2\n",
+        p("home"), p("data"), p("run"), p("recordings"), p("attachments"), p("backups"), p("profiles"), p("sim.conf"), p("addressbook.conf"), p("anonymous.conf"), p("providers.conf"), p("branding.conf"), p("integrations.conf"),
     );
     for i in 0..s.modems {
         if s.modems > 1 {

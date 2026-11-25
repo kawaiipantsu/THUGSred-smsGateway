@@ -47,6 +47,8 @@ pub struct Paths {
     pub anonymous: String = s("/etc/thugsred/anonymous.conf"),
     /// Upstream SMS providers (optional file).
     pub providers: String = s("/etc/thugsred/providers.conf"),
+    /// Dashboard branding (optional file).
+    pub branding: String = s("/etc/thugsred/branding.conf"),
 }}
 
 config_struct! {
@@ -310,6 +312,37 @@ pub struct SimProfile {
 }}
 
 config_struct! {
+/// Footer of the dashboard (branding.conf, `[footer]`).
+pub struct BrandingFooter {
+    pub company: String = String::new(),
+    pub contact_name: String = String::new(),
+    pub contact_email: String = String::new(),
+    /// Link shown in the footer (http or https).
+    pub website: String = String::new(),
+    /// Free text, for example a legal notice.
+    pub text: String = String::new(),
+    /// Show a small link to the THUGSred-smsGateway project.
+    pub show_project_link: bool = true,
+}}
+
+config_struct! {
+/// Dashboard branding (branding.conf). Empty values keep the defaults.
+pub struct Branding {
+    /// Product name shown in the header and in page titles; empty uses `web.title`.
+    pub title: String = String::new(),
+    pub subtitle: String = String::new(),
+    /// Path of a square logo image (png, svg, jpg, webp or gif).
+    pub logo: String = String::new(),
+    /// Colour behind the logo (`#rrggbb`); empty is transparent.
+    pub logo_background: String = String::new(),
+    /// `dark`, `light` or `auto` (follow the browser); empty uses `web.theme`.
+    pub theme: String = String::new(),
+    /// Accent colour (`#rrggbb`); empty keeps the built-in red.
+    pub accent_color: String = String::new(),
+    pub footer: BrandingFooter = BrandingFooter::default(),
+}}
+
+config_struct! {
 /// One address book entry.
 pub struct Contact {
     pub name: String = String::new(),
@@ -408,6 +441,8 @@ pub struct ProviderDef {
     #[serde(rename = "type")]
     pub kind: String = s("gatewayapi"),
     pub enabled: bool = false,
+    /// Name shown for this route in the dashboard; empty shows "SMS Gateway".
+    pub display_name: String = String::new(),
     pub api_token: String = String::new(),
     /// GatewayAPI platform: "com" (global) or "eu".
     pub region: String = s("com"),
@@ -493,6 +528,7 @@ pub struct Config {
     pub automation: Vec<AutomationRule>,
     pub contacts: Vec<Contact>,
     pub anonymous: Anonymous,
+    pub branding: Branding,
     /// Non-fatal findings from loading (unknown keys, risky settings).
     #[serde(skip)]
     pub warnings: Vec<String>,
@@ -508,6 +544,7 @@ pub struct ConfigFiles {
     pub addressbook: String,
     pub anonymous: String,
     pub providers: String,
+    pub branding: String,
 }
 
 impl Config {
@@ -550,6 +587,22 @@ impl Config {
                 crate::utils::list_matches(p, number)
                     || (!p.ends_with('*') && crate::utils::numbers_match(p, number))
             })
+    }
+    /// Product name shown by the dashboard.
+    pub fn brand_title(&self) -> &str {
+        if self.branding.title.is_empty() {
+            &self.web.title
+        } else {
+            &self.branding.title
+        }
+    }
+    /// Default dashboard theme: `dark`, `light` or `auto`.
+    pub fn brand_theme(&self) -> &str {
+        if self.branding.theme.is_empty() {
+            &self.web.theme
+        } else {
+            &self.branding.theme
+        }
     }
     /// An enabled SMS provider by name.
     pub fn provider(&self, name: &str) -> Option<&ProviderDef> {

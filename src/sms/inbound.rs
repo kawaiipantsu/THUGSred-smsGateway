@@ -1,6 +1,7 @@
 //! Inbound PDU processing: deduplication, classification, multipart
 //! assembly, delivery-report correlation and persistence.
 
+use super::ota;
 use super::pdu::decode::{Deliver, StatusReport};
 use super::pdu::types::{decode_payload_text, Alphabet};
 use super::pdu::{self, Pdu, PduDirection};
@@ -42,6 +43,11 @@ fn classify(d: &Deliver, payload: &[u8]) -> (&'static str, Option<mms::MmsNotifi
             None => ("wap_push", None),
         };
     }
+    // SIM Toolkit OTA (S@T/WIB browser pushes, Simjacker class) before the
+    // generic service/binary checks, since it is class 2 / PID 0x7F binary.
+    if ota::analyze(d, payload).is_some() {
+        return (ota::OtaAnalysis::MESSAGE_TYPE, None);
+    }
     if d.data_coding_scheme.message_waiting.is_some()
         || matches!(d.protocol_identifier, 0x40 | 0x7C..=0x7F)
     {
@@ -58,6 +64,7 @@ fn classify(d: &Deliver, payload: &[u8]) -> (&'static str, Option<mms::MmsNotifi
 
 fn event_for(message_type: &str) -> &'static str {
     match message_type {
+        "sim_toolkit" => "sms.ota_toolkit",
         "binary" => "sms.binary_received",
         "service" | "wap_push" => "sms.service_received",
         "mms_notification" => "mms.notification",
@@ -303,6 +310,9 @@ impl SmsService {
         if !missing.is_empty() {
             metadata["missing_parts"] = json!(missing);
         }
+        if let Some(ota) = ota::analyze(d, payload) {
+            metadata["sim_toolkit"] = json!(ota);
+        }
         let (mut sender, mut body) = (d.sender.number.clone(), text);
         if let Some(n) = &notification {
             metadata["mms"] = json!(n);
@@ -498,6 +508,13 @@ impl SmsService {
         if multipart_completed {
             self.events
                 .emit("sms.multipart_completed", Some(&m.id), data)
+                .await;
+        }
+        // Honeypot alert: a SIM Toolkit OTA push (possible Simjacker/WIBattack)
+        // also raises a dedicated security event for real-time collectors.
+        if m.message_type == ota::OtaAnalysis::MESSAGE_TYPE {
+            self.events
+                .emit("security.sim_attack", Some(&m.id), message_data(&m))
                 .await;
         }
         if m.message_type == "sms" && m.status == "received" {

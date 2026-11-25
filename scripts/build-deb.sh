@@ -48,7 +48,7 @@ for g in dialout audio; do
     if getent group "$g" >/dev/null; then adduser "$U" "$g" >/dev/null || true; fi
 done
 install -d -m 0750 -o root -g "$U" /etc/thugsred /etc/thugsred/modem-profiles
-for f in smsgateway sim integrations addressbook anonymous providers; do
+for f in smsgateway sim integrations addressbook anonymous providers branding; do
     [ -e "/etc/thugsred/$f.conf" ] || install -m 0640 -o root -g "$U" "/opt/THUGSred-smsGateway/config/$f.conf.example" "/etc/thugsred/$f.conf"
 done
 [ -e /etc/thugsred/smsgateway.env ] || install -m 0600 /opt/THUGSred-smsGateway/config/smsgateway.env.example /etc/thugsred/smsgateway.env

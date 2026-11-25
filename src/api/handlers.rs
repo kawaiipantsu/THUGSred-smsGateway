@@ -1375,6 +1375,7 @@ pub async fn providers(State(s): S) -> ApiResult {
         let db = &s.gw.db;
         out.push(json!({
             "name": p.name,
+            "display_name": if p.display_name.is_empty() { "SMS Gateway" } else { p.display_name.as_str() },
             "type": p.kind,
             "enabled": p.enabled,
             "route": route,
@@ -1812,8 +1813,20 @@ pub async fn db_backup(State(s): S, Extension(ctx): C, headers: HeaderMap) -> Ap
 pub async fn ui_config(State(s): S) -> ApiResult {
     let cfg = s.gw.cfg.load();
     ok(json!({
-        "title": cfg.web.title,
-        "theme": cfg.web.theme,
+        "title": cfg.brand_title(),
+        "subtitle": cfg.branding.subtitle,
+        "theme": cfg.brand_theme(),
+        "logo": super::web::logo_url(&cfg),
+        "logo_background": cfg.branding.logo_background,
+        "accent_color": cfg.branding.accent_color,
+        "footer": {
+            "company": cfg.branding.footer.company,
+            "contact_name": cfg.branding.footer.contact_name,
+            "contact_email": cfg.branding.footer.contact_email,
+            "website": cfg.branding.footer.website,
+            "text": cfg.branding.footer.text,
+            "show_project_link": cfg.branding.footer.show_project_link,
+        },
         "refresh_interval_seconds": cfg.web.refresh_interval_seconds,
         "show_message_content": cfg.web.show_message_content,
         "show_modem_information": cfg.web.show_modem_information,

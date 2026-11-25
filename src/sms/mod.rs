@@ -2,6 +2,7 @@
 
 mod automation;
 mod inbound;
+pub mod ota;
 pub mod pdu;
 pub mod sender;
 mod service;

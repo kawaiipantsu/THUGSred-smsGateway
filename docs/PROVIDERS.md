@@ -63,6 +63,7 @@ callback_secret = ""
 | `name` | string | required | Identifier used in requests and in the callback URL: letters, digits, `-`, `_`; unique |
 | `type` | string | `"gatewayapi"` | Provider type |
 | `enabled` | boolean | `false` | Disabled providers are ignored; their queued messages wait until they expire |
+| `display_name` | string | | Name shown for the route on the dashboard's Send page; empty shows `SMS Gateway` |
 | `api_token` | string | | API token. Required when enabled. May be a secret reference (`"${NAME}"`, `"${file:/path}"`) |
 | `region` | string | `"com"` | `com` (`messaging.gatewayapi.com`) or `eu` (`messaging.gatewayapi.eu`). A token works on one platform only. |
 | `base_url` | string | | Replaces the URL derived from `region` (testing) |

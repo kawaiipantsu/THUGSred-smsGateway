@@ -212,7 +212,7 @@ export const hidden = () => h('em', { class: 'muted' }, HIDDEN);
 const KINDS = {
   ok: ['delivered', 'sent', 'submitted', 'received', 'ready', 'home', 'completed', 'running', 'healthy', 'supported', 'enabled', 'yes', 'valid', 'success', 'assembled', 'answered'],
   warn: ['queued', 'scheduled', 'processing', 'sending', 'retrying', 'pending', 'registering', 'connecting', 'initializing', 'recovering', 'degraded', 'roaming', 'searching', 'submission_unknown', 'unverified', 'unknown', 'experimental', 'shutting_down', 'ringing', 'restart required'],
-  bad: ['failed', 'delivery_failed', 'dead', 'expired', 'disconnected', 'sim_locked', 'denied', 'missing', 'error', 'pin_required', 'puk_required', 'not_registered', 'unhealthy', 'invalid', 'malformed', 'missed'],
+  bad: ['failed', 'delivery_failed', 'dead', 'expired', 'disconnected', 'sim_locked', 'denied', 'missing', 'error', 'pin_required', 'puk_required', 'not_registered', 'unhealthy', 'invalid', 'malformed', 'missed', 'sim_toolkit'],
   muted: ['cancelled', 'disabled', 'unsupported', 'no', 'none'],
 };
 const GLYPH = { ok: '●', warn: '▲', bad: '✖', muted: '○', info: '◆' };

@@ -35,6 +35,8 @@ addressbook = "/etc/thugsred/addressbook.conf"
 anonymous = "/etc/thugsred/anonymous.conf"
 # Upstream SMS providers (optional file; see providers.conf.example).
 providers = "/etc/thugsred/providers.conf"
+# Dashboard branding (optional file; see branding.conf.example).
+branding = "/etc/thugsred/branding.conf"
 
 # Settings for the modem. With several modems this table holds the defaults
 # and each [[modems]] entry (see the end of this file) overrides them.
@@ -143,7 +145,7 @@ admin_tokens = []                     # empty: same access as other endpoints
 [web]
 enabled = true                        # [restart]
 title = "THUGSred SMS Gateway"
-theme = "dark"                        # dark | light
+theme = "dark"                        # dark | light | auto
 refresh_interval_seconds = 10
 show_message_content = true
 show_modem_information = true

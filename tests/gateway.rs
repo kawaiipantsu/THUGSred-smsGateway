@@ -477,3 +477,37 @@ async fn deduplication_can_be_disabled() {
     );
     h.stop().await;
 }
+
+#[tokio::test]
+async fn detects_sim_toolkit_ota_attack_on_a_honeypot_number() {
+    let h = start(Setup::default()).await;
+    h.ready().await;
+
+    // An unsecured SMS-PP SIM data-download push to an S@T Browser TAR, the
+    // shape used by Simjacker. Class 2 (SIM), 8-bit, PID 0x7F.
+    // CPL CHL SPI(00 00) KIc KID TAR(B0 00 10) CNTR(5) PCNTR + opaque data.
+    let packet: Vec<u8> = vec![
+        0x00, 0x11, 0x15, 0x00, 0x00, 0x00, 0x00, 0xB0, 0x00, 0x10, 0, 0, 0, 0, 0, 0, 1, 2, 3,
+    ];
+    let mut spec = DeliverSpec::text("+4500000042", "", ts());
+    spec.payload = Payload::Binary(packet.clone());
+    spec.encoding = Encoding::Binary;
+    spec.message_class = Some(2);
+    spec.protocol_identifier = 0x7F;
+    h.sim().incoming_sms(&encode_deliver(&spec).unwrap()[0]);
+
+    let m = h.wait_inbound(1).await.remove(0);
+    assert_eq!(m.message_type, "sim_toolkit");
+    // The raw attack and its payload are preserved for analysis.
+    assert!(m.raw_pdu.is_some());
+    let ota = &m.metadata.as_ref().unwrap()["sim_toolkit"];
+    assert_eq!(ota["application"], "sat_browser");
+    assert_eq!(ota["tar"], "B00010");
+    assert_eq!(ota["suspected_attack"], true);
+    assert_eq!(ota["security"]["unsecured"], true);
+
+    // Both the ordinary OTA event and the honeypot security alert fire.
+    assert_eq!(h.events("sms.ota_toolkit").await.len(), 1);
+    assert_eq!(h.events("security.sim_attack").await.len(), 1);
+    h.stop().await;
+}

@@ -1,6 +1,6 @@
 // THUGSred SMS Gateway dashboard: start-up, routing, authentication and live updates.
 
-import { app, h, fill, api, setToken, errorBox, button, dialog, field, toast, debounce } from './core.js';
+import { app, h, s, fill, api, setToken, errorBox, button, dialog, field, toast, debounce } from './core.js';
 import { overview, inbox, outbox, history as historyPage, queue, openMessage } from './pages-main.js';
 import { send, contacts } from './pages-send.js';
 import { pdu, calls, integrations, modem, system, apidocs } from './pages-more.js';
@@ -31,11 +31,57 @@ let ticks = 0;
 
 // ---- theme ---------------------------------------------------------------------
 
+const SUN = 'M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10ZM12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42';
+const MOON = 'M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z';
+const prefersLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+
+/** "auto" follows the browser's preference. */
 function applyTheme(theme) {
-  const t = theme === 'light' ? 'light' : 'dark';
+  const t = theme === 'auto' ? (prefersLight && prefersLight.matches ? 'light' : 'dark') : theme === 'light' ? 'light' : 'dark';
   document.documentElement.classList.remove('dark', 'light');
   document.documentElement.classList.add(t);
-  $('theme-btn').textContent = t === 'dark' ? 'Light theme' : 'Dark theme';
+  const next = t === 'dark' ? 'light' : 'dark';
+  fill($('theme-btn'), s('svg', { viewBox: '0 0 24 24', class: 'ico', 'aria-hidden': 'true' }, s('path', { d: t === 'dark' ? SUN : MOON })));
+  $('theme-btn').title = `Switch to the ${next} theme`;
+  $('theme-btn').setAttribute('aria-label', `Switch to the ${next} theme`);
+}
+if (prefersLight) {
+  prefersLight.addEventListener('change', () => {
+    if (!storedTheme() && app.cfg.theme === 'auto') applyTheme('auto');
+  });
+}
+
+/** Name, logo, colours and footer from the gateway's branding settings. */
+function applyBranding(cfg) {
+  const title = cfg.title || 'SMS Gateway';
+  $('title').textContent = title;
+  $('subtitle').textContent = cfg.subtitle || '';
+  const icon = cfg.logo || '/favicon.svg';
+  if ($('logo').getAttribute('src') !== icon) $('logo').setAttribute('src', icon);
+  $('icon').setAttribute('href', icon);
+  // A custom logo is also shown large above the navigation.
+  $('nav-brand').hidden = !cfg.logo;
+  if (cfg.logo && $('nav-logo').getAttribute('src') !== icon) $('nav-logo').setAttribute('src', icon);
+  for (const tile of [$('logo-tile'), $('nav-brand')]) {
+    tile.classList.toggle('logo-bg', !!(cfg.logo && cfg.logo_background));
+    tile.style.background = cfg.logo && cfg.logo_background ? cfg.logo_background : '';
+  }
+  const root = document.documentElement;
+  if (/^#[0-9a-f]{6}$/i.test(cfg.accent_color || '')) root.style.setProperty('--accent', cfg.accent_color);
+  else root.style.removeProperty('--accent');
+
+  const f = cfg.footer || {};
+  const sep = () => h('span', { class: 'sep', 'aria-hidden': 'true' }, '·');
+  const bits = [h('span', null, h('strong', null, f.company || title), cfg.version ? ` · v${cfg.version}` : '')];
+  if (f.contact_name || f.contact_email) {
+    bits.push(h('span', null, 'Contact: ', f.contact_name || '', f.contact_name && f.contact_email ? ' · ' : '',
+      f.contact_email ? h('a', { href: 'mailto:' + f.contact_email }, f.contact_email) : null));
+  }
+  if (f.text) bits.push(h('span', null, f.text));
+  bits.push(h('span', { class: 'grow' }));
+  if (/^https?:\/\//i.test(f.website || '')) bits.push(h('a', { href: f.website, rel: 'noopener noreferrer', target: '_blank' }, f.website.replace(/^https?:\/\//i, '').replace(/\/$/, '')));
+  if (f.show_project_link !== false) bits.push(h('a', { href: 'https://github.com/kawaiipantsu/THUGSred-smsGateway', rel: 'noopener noreferrer', target: '_blank', title: 'Open-source SMS gateway' }, 'THUGSred-smsGateway'));
+  fill($('foot'), bits.map((b, i) => (i && !b.classList.contains('grow') && !bits[i - 1].classList.contains('grow') ? [sep(), b] : b)));
 }
 
 function storedTheme() {
@@ -88,10 +134,10 @@ function route() {
   current = null;
   document.querySelectorAll('dialog.modal').forEach((d) => d.close());
   for (const a of $('nav').querySelectorAll('a')) {
-    if (a.getAttribute('href') === '/' + name) a.setAttribute('aria-current', 'page');
+    if (a.getAttribute('href') === '/' + name && !a.classList.contains('nav-brand')) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
-  document.title = `${entry[0]} · ${app.cfg.title || 'THUGSred SMS Gateway'}`;
+  document.title = `${entry[0]} · ${app.cfg.title || 'SMS Gateway'}`;
   fill(main, h('h1', null, entry[0]));
   try {
     current = entry[1](main) || {};
@@ -238,15 +284,14 @@ async function start() {
   } catch (e) {
     if (current && current.destroy) current.destroy();
     current = null;
-    fill(main, h('h1', null, 'THUGSred SMS Gateway'), errorBox(e),
+    fill(main, h('h1', null, $('title').textContent || 'SMS Gateway'), errorBox(e),
       e.status === 401 ? h('p', null, 'This gateway requires a bearer token.') : button('Try again', start, 'primary'));
     return;
   }
   const cfg = app.cfg;
   applyTheme(storedTheme() || cfg.theme);
-  $('title').textContent = cfg.title || 'THUGSred SMS Gateway';
-  $('instance').textContent = cfg.instance_name && cfg.instance_name !== cfg.title ? cfg.instance_name : '';
-  $('version').textContent = cfg.version ? 'v' + cfg.version : '';
+  applyBranding(cfg);
+  $('instance').textContent = '';
   setLive(false);
   route();
   stream();
@@ -259,5 +304,5 @@ if (/^#\//.test(location.hash)) {
   const old = location.hash.slice(2).replace(/^api(?=$|[/?])/, 'docs');
   history.replaceState(null, '', '/' + old);
 }
-applyTheme(storedTheme() || 'dark');
+applyTheme(storedTheme() || (document.documentElement.classList.contains('light') ? 'light' : 'dark'));
 start();

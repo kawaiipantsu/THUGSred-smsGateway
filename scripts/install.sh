@@ -107,6 +107,7 @@ new_conf integrations.conf.example integrations.conf 0640
 new_conf addressbook.conf.example addressbook.conf 0640
 new_conf anonymous.conf.example anonymous.conf 0640
 new_conf providers.conf.example providers.conf 0640
+new_conf branding.conf.example branding.conf 0640
 new_conf smsgateway.env.example smsgateway.env 0600
 if [ -n "$CONF_GROUP" ]; then
     chown root:"$CONF_GROUP" "$CONFDIR" "$CONFDIR/modem-profiles"

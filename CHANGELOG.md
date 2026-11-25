@@ -9,6 +9,13 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **SIM Toolkit attack detection (honeypot).** Inbound binary SMS directed at the SIM
+  (S@T Browser / WIB pushes of the Simjacker/WIBattack class) are detected, decoded (TAR,
+  SPI security level, suspected-attack flag) and stored as `sim_toolkit` messages with the
+  raw PDU preserved. New events `sms.ota_toolkit` and `security.sim_attack`, a dashboard
+  filter and badge, and the messages API expose them for remote honeypot collection. Detection
+  is read-only; no SIM Toolkit messages are generated. See docs/HONEYPOT.md.
+
 - **Contacts.** Contacts can be saved, changed and deleted from a new Contacts page and
   through `/api/v1/contacts`. They are stored in the database (migration `0002_contacts`),
   apply without a reload and complement `addressbook.conf`.

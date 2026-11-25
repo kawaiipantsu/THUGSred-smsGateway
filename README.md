@@ -109,6 +109,7 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 | MMS retrieval through the modem's own data stack | ❌ | |
 | MMS sending | ❌ | |
 | USSD (named commands, optional arbitrary codes) | 🔌 | |
+| SIM Toolkit OTA / Simjacker detection (S@T, WIB) on inbound | ✅ | Read-only detection for honeypot numbers; decodes the attack and alerts. See [docs/HONEYPOT.md](docs/HONEYPOT.md). |
 
 ### Modems
 
@@ -318,6 +319,7 @@ examples show the defaults.
 | `addressbook.conf` | Names for known numbers | `0640` |
 | `anonymous.conf` | Numbers that are never disclosed to integrations or logs | `0640` |
 | `providers.conf` | Optional SMS providers (API token, sender names, limits) | `0640` |
+| `branding.conf` | Optional dashboard branding (name, logo, colours, footer) | `0640` |
 | `smsgateway.env` | Secrets referenced as `"${NAME}"`; loaded by systemd for the service and read directly by the command-line tool | `0600` |
 | `modem-profiles/*.toml` | Optional custom or overriding modem profiles | |
 
@@ -535,7 +537,9 @@ composer for a recipient and `?message=<id>` opens one message. Addresses of the
 `/#/page` form are redirected.
 
 The Send page is a composer with contact search, a live segment counter, a preview and a
-choice between modem and SMS provider. The Contacts page saves names for numbers; saved
+choice between modem and SMS provider. An Options panel adds scheduling, priority, delivery
+reports, flash, and a binary payload mode with application ports for value-added / interactive
+services. The Contacts page saves names for numbers; saved
 contacts can be picked when sending and are shown instead of numbers throughout.
 
 It has been exercised in headless Chromium against the simulator only.
@@ -817,6 +821,7 @@ with `thugsred-smsgateway db migrate`. Rollback steps are in
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every configuration field |
 | [docs/API.md](docs/API.md) | REST API reference |
 | [docs/PDU.md](docs/PDU.md) | PDU codec and tools |
+| [docs/HONEYPOT.md](docs/HONEYPOT.md) | SIM Toolkit / Simjacker detection and honeypot use |
 | [docs/PROVIDERS.md](docs/PROVIDERS.md) | Sending through an SMS provider, sender names, status callbacks |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Integrations, events, templates, routing, anonymisation, automation |
 | [docs/DATABASE.md](docs/DATABASE.md) | Engines, schema, message states, retention |

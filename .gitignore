@@ -50,6 +50,8 @@ integrations.conf
 sim.conf
 addressbook.conf
 anonymous.conf
+providers.conf
+branding.conf
 smsgateway.env
 
 # Audio recordings
@@ -63,3 +65,7 @@ smsgateway.env
 .vscode/
 *.swp
 *~
+
+# Deployment branding (logos and other local assets)
+/assets/
+/branding/
