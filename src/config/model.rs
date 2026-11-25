@@ -183,6 +183,12 @@ pub struct Api {
     pub admin_allowed_cidrs: Vec<String> = Vec::new(),
     /// Bearer tokens required for administrative endpoints; empty reuses `authentication`.
     pub admin_tokens: Vec<String> = Vec::new(),
+    /// Source networks that use the dashboard and API without a bearer token
+    /// and with full (administrative) access, even when `authentication` is
+    /// "bearer". For your own interactive/dashboard networks; external
+    /// integrations (outside this list) still need a token. Must also be
+    /// within `allowed_cidrs`.
+    pub local_networks: Vec<String> = Vec::new(),
 }}
 
 config_struct! {

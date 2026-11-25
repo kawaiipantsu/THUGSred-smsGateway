@@ -452,7 +452,11 @@ async fn guard(
         .and_then(|h| h.to_str().ok())
         .map(str::to_string);
     let is_asset = is_public_asset(req.uri().path());
-    let (authenticated, admin) = resolve_auth(&state, &cfg, req.headers()).await;
+    let (tok_auth, tok_admin) = resolve_auth(&state, &cfg, req.headers()).await;
+    // Trusted local/UI networks need no token and get full access; external
+    // callers still authenticate with a bearer token.
+    let local = ip_in(&cfg.api.local_networks, ip);
+    let (authenticated, admin) = (tok_auth || local, tok_admin || local);
 
     let mut resp = match authorize(&state, &cfg, ip, &req, authenticated) {
         Err(e) => e.into_response(),

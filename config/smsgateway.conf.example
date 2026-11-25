@@ -131,6 +131,11 @@ port = 8080                           # [restart]
 authentication = "none"               # none | bearer
 tokens = []                           # bearer tokens, at least 16 characters
 allowed_cidrs = ["127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+# Networks that use the dashboard/API WITHOUT a token and with full access,
+# even when authentication = "bearer". For your own interactive/UI networks;
+# external integrations (outside this list) still need a token. Must be within
+# allowed_cidrs. Empty = everyone needs a token when authentication = "bearer".
+local_networks = []
 trusted_proxies = []                  # proxies whose X-Forwarded-For is honoured
 allowed_hosts = []                    # accepted Host headers; empty disables the check
 cors_enabled = false

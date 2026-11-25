@@ -1258,6 +1258,7 @@ fn validate(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) 
     validate_cidrs(errors, "api.allowed_cidrs", &api.allowed_cidrs);
     validate_cidrs(errors, "api.admin_allowed_cidrs", &api.admin_allowed_cidrs);
     validate_cidrs(errors, "api.trusted_proxies", &api.trusted_proxies);
+    validate_cidrs(errors, "api.local_networks", &api.local_networks);
     positive(
         errors,
         "api.max_request_size_kb",

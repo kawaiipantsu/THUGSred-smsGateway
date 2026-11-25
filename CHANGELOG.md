@@ -9,6 +9,10 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`api.local_networks`.** Source networks that use the dashboard and API without a bearer
+  token and with full access, even when `authentication = "bearer"` — so your own UI/internal
+  networks need no token while external integrations still authenticate with one.
+
 - **Managed API tokens.** Create named bearer tokens (scope `read` or `admin`) from the
   dashboard's API Tokens page or `/api/v1/tokens`, each revocable instantly with no reload.
   Only a SHA-256 hash is stored (migration 0004); the raw value is shown once. Managed tokens

@@ -421,6 +421,7 @@ See [DATABASE.md](DATABASE.md#retention) for exactly what is and is not removed.
 | `request_timeout_seconds` | integer | `30` | Greater than 0 | restart (reported) |
 | `rate_limit_per_minute` | integer | `120` | Requests per client address and minute; 0 = unlimited | reload |
 | `admin_enabled` | boolean | `true` | `false` disables every administrative endpoint | reload |
+| `local_networks` | list of strings | `[]` | Networks that use the dashboard/API **without a token** and with full access, even when `authentication = "bearer"`; external callers outside the list still need a token. Must be within `allowed_cidrs`. | reload |
 | `admin_allowed_cidrs` | list of strings | `[]` | Additional restriction for administrative endpoints; empty = same as `allowed_cidrs` | reload |
 | `admin_tokens` | list of strings | `[]` | Tokens required for administrative endpoints, each at least 16 characters; empty = same access as other endpoints | reload |
 

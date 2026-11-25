@@ -99,7 +99,7 @@ Checks run in this order for every request. The first failing check ends the req
 | 1 | Client address is in the allowed networks | `api.allowed_cidrs` | `403 forbidden` |
 | 2 | `Host` header is accepted | `api.allowed_hosts` (empty disables) | `421 invalid_host` |
 | 3 | Not a cross-site request (methods other than `GET`, `HEAD`, `OPTIONS`) | `Origin` must match `Host` or be listed in `api.cors_allowed_origins`; without `Origin`, `Sec-Fetch-Site: cross-site` is rejected | `403 forbidden` |
-| 4 | Bearer token | `api.authentication = "bearer"`: a token from `api.tokens` or `api.admin_tokens` | `401 unauthorized` |
+| 4 | Bearer token | `api.authentication = "bearer"`: a token from `api.tokens`, `api.admin_tokens`, or a managed token — **unless** the client address is in `api.local_networks` (then no token is needed and the caller has admin rights) | `401 unauthorized` |
 | 5 | Rate limit per client address | `api.rate_limit_per_minute` | `429 rate_limited` |
 
 Details:

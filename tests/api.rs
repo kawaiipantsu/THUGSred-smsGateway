@@ -996,3 +996,68 @@ async fn managed_api_tokens_lifecycle() {
     assert_eq!(r.status().as_u16(), 404);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn local_networks_skip_the_token_but_external_callers_need_one() {
+    let h = start(Setup {
+        overrides: vec![
+            "api.authentication=bearer".into(),
+            "api.admin_tokens=[\"bootstrap-admin-token-0123456789\"]".into(),
+            // Loopback is local (no token); a public test range is allowed but external.
+            "api.local_networks=[\"127.0.0.0/8\",\"::1/128\"]".into(),
+            "api.trusted_proxies=[\"127.0.0.1\"]".into(),
+            "api.allowed_cidrs=[\"127.0.0.0/8\",\"::1/128\",\"203.0.113.0/24\"]".into(),
+        ],
+        ..Default::default()
+    })
+    .await;
+    h.ready().await;
+    let base = serve(&h).await;
+    let client = reqwest::Client::new();
+
+    // Local (loopback) needs no token and has admin rights.
+    assert_eq!(
+        reqwest::get(format!("{base}/api/v1/status"))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        200
+    );
+    let r = client
+        .post(format!("{base}/api/v1/tokens"))
+        .json(&json!({"name": "svc", "scope": "read"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        r.status().as_u16(),
+        201,
+        "local network manages tokens without a token"
+    );
+
+    // An external but allowed address (via the trusted proxy) still needs a token.
+    let ext = |tok: Option<&str>| {
+        let c = client.clone();
+        let url = format!("{base}/api/v1/status");
+        let tok = tok.map(str::to_string);
+        async move {
+            let mut rq = c.get(url).header("x-forwarded-for", "203.0.113.9");
+            if let Some(t) = tok {
+                rq = rq.header("authorization", format!("Bearer {t}"));
+            }
+            rq.send().await.unwrap().status().as_u16()
+        }
+    };
+    assert_eq!(
+        ext(None).await,
+        401,
+        "external caller without a token is rejected"
+    );
+    assert_eq!(
+        ext(Some("bootstrap-admin-token-0123456789")).await,
+        200,
+        "external caller with a token works"
+    );
+    h.stop().await;
+}
