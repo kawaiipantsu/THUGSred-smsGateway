@@ -69,3 +69,6 @@ smsgateway.env
 # Deployment branding (logos and other local assets)
 /assets/
 /branding/
+
+# Local honeypot prep (contains a bearer token) - never commit
+docs/honeypot_prep.txt
