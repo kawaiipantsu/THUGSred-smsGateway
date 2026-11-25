@@ -630,6 +630,7 @@ fn load_addressbook(
                 Some(n) => cfg.contacts.push(Contact {
                     name: n.to_string(),
                     number: number.clone(),
+                    ..Default::default()
                 }),
                 None => errors.push(format!(
                     "{file}: contacts.{number:?} must be a string (the name to show)"
@@ -648,6 +649,11 @@ fn load_addressbook(
                 warnings,
             ));
         }
+    }
+    // Entries of the file are never "saved" contacts, whatever they claim.
+    for c in &mut cfg.contacts {
+        c.source = "file".into();
+        c.id.clear();
     }
     for c in &cfg.contacts {
         if c.name.trim().is_empty() || c.number.trim().is_empty() {

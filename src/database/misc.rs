@@ -869,3 +869,67 @@ impl Db {
         Ok((Json::Object(report), files))
     }
 }
+
+impl Db {
+    /// Contacts saved through the dashboard or API, ordered by name.
+    pub async fn saved_contacts(&self) -> DbResult<Vec<crate::config::Contact>> {
+        Ok(self
+            .rows(
+                "SELECT id, name, number, note FROM contacts ORDER BY name, number",
+                vec![],
+            )
+            .await?
+            .iter()
+            .map(|r| crate::config::Contact {
+                id: get_s(r, "id").unwrap_or_default(),
+                name: get_s(r, "name").unwrap_or_default(),
+                number: get_s(r, "number").unwrap_or_default(),
+                note: get_s(r, "note").unwrap_or_default(),
+                source: "saved".into(),
+            })
+            .collect())
+    }
+
+    pub async fn insert_contact(&self, name: &str, number: &str, note: &str) -> DbResult<String> {
+        let id = utils::new_id();
+        let now = utils::now();
+        self.exec(
+            "INSERT INTO contacts (id, name, number, note, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            params![&id, name, number, note, &now, &now],
+        )
+        .await?;
+        Ok(id)
+    }
+
+    /// Returns false when no contact has this id.
+    pub async fn update_contact(
+        &self,
+        id: &str,
+        name: &str,
+        number: &str,
+        note: &str,
+    ) -> DbResult<bool> {
+        // The existence check keeps "unchanged" apart from "missing": MySQL
+        // reports zero affected rows for an update that changes nothing.
+        if self
+            .count("SELECT COUNT(*) FROM contacts WHERE id = ?", params![id])
+            .await?
+            == 0
+        {
+            return Ok(false);
+        }
+        self.exec(
+            "UPDATE contacts SET name = ?, number = ?, note = ?, updated_at = ? WHERE id = ?",
+            params![name, number, note, utils::now(), id],
+        )
+        .await?;
+        Ok(true)
+    }
+
+    pub async fn delete_contact(&self, id: &str) -> DbResult<bool> {
+        Ok(self
+            .exec("DELETE FROM contacts WHERE id = ?", params![id])
+            .await?
+            == 1)
+    }
+}

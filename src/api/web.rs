@@ -38,6 +38,30 @@ fn file(path: &str, cache: &'static str) -> Response {
     }
 }
 
+/// Dashboard pages. Each has its own path so that pages can be reloaded,
+/// bookmarked and linked to; all of them serve the same document.
+pub const PAGES: &[&str] = &[
+    "overview",
+    "send",
+    "contacts",
+    "inbox",
+    "outbox",
+    "history",
+    "queue",
+    "pdu",
+    "calls",
+    "integrations",
+    "modem",
+    "system",
+    "docs",
+];
+
+pub fn is_page(path: &str) -> bool {
+    path.strip_prefix('/')
+        .map(|p| PAGES.contains(&p))
+        .unwrap_or(false)
+}
+
 pub async fn index() -> Response {
     file("index.html", "no-cache")
 }

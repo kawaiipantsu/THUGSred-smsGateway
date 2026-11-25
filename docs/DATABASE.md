@@ -56,6 +56,7 @@ Changing any `[database]` setting needs a restart.
 | `audit_events` | Audit trail of administrative and state-changing actions | Index on `created_at` |
 | `automation_log` | Firings of automation rules (for cooldowns and hourly caps) | Index on `(rule_name, created_at)` |
 | `kv_state` | Small persistent state: SIM PIN attempt counters, recording outcomes | Primary key `k` |
+| `contacts` | Contacts saved through the dashboard or API (name, number, note) | Unique `number` |
 | `schema_migrations` | Applied migrations | Primary key `version` |
 
 There are no foreign key constraints; related rows are removed by the application.
@@ -159,8 +160,8 @@ Messages submitted through the raw PDU endpoint are created as `processing` and 
 ## Migrations
 
 Migrations are SQL files embedded in the binary, one set per engine
-(`migrations/sqlite/`, `migrations/mysql/`). This release has one migration: `0001_initial`
-(schema version 1).
+(`migrations/sqlite/`, `migrations/mysql/`). The migrations are `0001_initial` and `0002_contacts`
+(schema version 2).
 
 - With `database.auto_migrate = true` (default) pending migrations are applied when the
   daemon starts.

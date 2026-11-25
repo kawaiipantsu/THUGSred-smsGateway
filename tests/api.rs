@@ -776,3 +776,125 @@ async fn live_event_stream_and_integration_test_endpoint() {
     .await;
     h.stop().await;
 }
+
+#[tokio::test]
+async fn contacts_and_page_paths() {
+    let h = start(Setup::default()).await;
+    h.ready().await;
+    let base = serve(&h).await;
+    let http = reqwest::Client::new();
+
+    // Every dashboard page has a real path that serves the application shell.
+    for page in ["", "send", "contacts", "inbox", "history", "docs"] {
+        let r = reqwest::get(format!("{base}/{page}")).await.unwrap();
+        assert_eq!(r.status().as_u16(), 200, "/{page}");
+        assert!(r.headers()["content-type"]
+            .to_str()
+            .unwrap()
+            .starts_with("text/html"));
+    }
+    let r = reqwest::get(format!("{base}/send?to=%2B4500000001"))
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 200);
+    assert_eq!(
+        reqwest::get(format!("{base}/nope"))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        404
+    );
+
+    // Create, list, use, change, delete.
+    let (code, v) = post(
+        &base,
+        "/api/v1/contacts",
+        json!({"name": " Alice ", "number": "+45 00 00 00 07", "note": "on call"}),
+    )
+    .await;
+    assert_eq!(code, 201, "{v}");
+    let id = v["data"]["id"].as_str().unwrap().to_string();
+    assert_eq!(
+        (v["data"]["name"].as_str(), v["data"]["number"].as_str()),
+        (Some("Alice"), Some("+4500000007"))
+    );
+    assert_eq!(
+        (
+            v["data"]["source"].as_str(),
+            v["data"]["editable"].as_bool()
+        ),
+        (Some("saved"), Some(true))
+    );
+    let (code, _) = post(
+        &base,
+        "/api/v1/contacts",
+        json!({"name": "Twin", "number": "+4500000007"}),
+    )
+    .await;
+    assert_eq!(code, 409);
+    for bad in [
+        json!({"name": "", "number": "+4500000008"}),
+        json!({"name": "X", "number": "abc"}),
+        json!({"name": "X"}),
+    ] {
+        assert_eq!(post(&base, "/api/v1/contacts", bad).await.0, 400);
+    }
+    let (_, v) = get(&base, "/api/v1/contacts").await;
+    assert_eq!(v["data"]["contacts"].as_array().unwrap().len(), 1);
+
+    // The name is used for messages from and to that number at once.
+    let (_, v) = post(
+        &base,
+        "/api/v1/sms/send",
+        json!({"to": "+4500000007", "message": "hi"}),
+    )
+    .await;
+    let mid = v["message_id"].as_str().unwrap().to_string();
+    let (_, v) = get(&base, &format!("/api/v1/messages/{mid}")).await;
+    assert_eq!(v["data"]["recipient_name"], "Alice");
+
+    let (code, v) = post(
+        &base,
+        &format!("/api/v1/contacts/{id}"),
+        json!({"name": "Alice B", "number": "+4500000007"}),
+    )
+    .await;
+    assert_eq!(
+        (code, v["data"]["name"].as_str(), v["data"]["note"].as_str()),
+        (200, Some("Alice B"), Some(""))
+    );
+    let (_, v) = get(&base, &format!("/api/v1/messages/{mid}")).await;
+    assert_eq!(v["data"]["recipient_name"], "Alice B");
+    assert_eq!(
+        post(
+            &base,
+            "/api/v1/contacts/unknown",
+            json!({"name": "Z", "number": "+4500000009"})
+        )
+        .await
+        .0,
+        404
+    );
+
+    // Saved contacts survive a configuration reload.
+    h.gw.reload().await.unwrap();
+    let (_, v) = get(&base, "/api/v1/contacts").await;
+    assert_eq!(v["data"]["contacts"][0]["name"], "Alice B");
+
+    let r = http
+        .delete(format!("{base}/api/v1/contacts/{id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 200);
+    let r = http
+        .delete(format!("{base}/api/v1/contacts/{id}"))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 404);
+    let (_, v) = get(&base, &format!("/api/v1/messages/{mid}")).await;
+    assert!(v["data"]["recipient_name"].is_null());
+    h.stop().await;
+}

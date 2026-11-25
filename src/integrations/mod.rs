@@ -774,6 +774,7 @@ mod tests {
         cfg.contacts.push(crate::config::Contact {
             name: "Secret Person".into(),
             number: "+4500000000".into(),
+            ..Default::default()
         });
         cfg.anonymous.numbers = vec!["+4500000000".into()];
         for kind in [
@@ -820,6 +821,7 @@ mod tests {
         cfg.contacts.push(crate::config::Contact {
             name: "Alice".into(),
             number: "+4500000000".into(),
+            ..Default::default()
         });
         let mut d = def("webhook");
         let (.., Body::Json(j)) = parts(build_request(&d, &ev("hi"), &cfg).unwrap()) else {
@@ -874,6 +876,7 @@ mod tests {
         cfg.contacts.push(crate::config::Contact {
             name: "Alice Example".into(),
             number: "+45 00 00 00 00".into(),
+            ..Default::default()
         });
         let (.., body) = parts(build_request(&n, &ev("hello"), &cfg).unwrap());
         assert_eq!(

@@ -39,7 +39,16 @@ const pduBlock = (hex) => h('pre', { class: 'pdu' }, hex);
 /** Open the detail dialog for one message. */
 export async function openMessage(id, onChanged) {
   const box = h('div', null, h('p', { class: 'muted' }, 'Loading…'));
-  const d = dialog('Message ' + id, box, { wide: true });
+  // The address carries the open message, so it can be reloaded and shared.
+  const setParam = (value) => {
+    const u = new URL(location.href);
+    if (value) u.searchParams.set('message', value);
+    else if (u.searchParams.get('message') === id) u.searchParams.delete('message');
+    else return;
+    window.history.replaceState(null, "", u.pathname + u.search);
+  };
+  setParam(id);
+  const d = dialog('Message ' + id, box, { wide: true, onClose: () => setParam(null) });
   try {
     const [m, parts, st] = await Promise.all([get('/messages/' + encodeURIComponent(id)), get(`/messages/${encodeURIComponent(id)}/parts`), get(`/messages/${encodeURIComponent(id)}/status`)]);
     const content = showBody();
@@ -264,176 +273,6 @@ export function overview(root) {
   const grid = h('div', { class: 'grid' });
   root.appendChild(grid);
   return mountPanels(grid, [hints, daemon, db, counters, modems, activity, integ, recent, events]);
-}
-
-// ---- send ---------------------------------------------------------------------------
-
-const FINAL = ['delivered', 'failed', 'delivery_failed', 'cancelled', 'expired', 'submission_unknown', 'malformed'];
-
-export function send(root) {
-  let alive = true, sims = [], providers = [], estSeq = 0, timer = null;
-  const to = h('input', { type: 'tel', name: 'to', required: true, placeholder: '+4500000000', autocomplete: 'off', inputmode: 'tel' });
-  const msg = h('textarea', { name: 'message', rows: 6, required: true, placeholder: 'Message text' });
-  const est = h('div', { class: 'estimate', 'aria-live': 'polite' }, '0 characters');
-  const report = select([['', 'Gateway default'], ['true', 'Request a delivery report'], ['false', 'No delivery report']]);
-  const prio = select([['normal', 'Normal'], ['high', 'High'], ['low', 'Low']]);
-  const when = h('input', { type: 'datetime-local' });
-  const flash = check('Flash SMS (shown immediately, usually not stored)');
-  const modem = h('select', null);
-  const modemField = field('Modem / SIM', modem, 'Automatic lets the gateway choose a ready modem.');
-  modemField.hidden = true;
-  const route = h('select', null);
-  const routeField = field('Send via', route, 'A modem sends with its SIM number. A provider can show a sender name.');
-  routeField.hidden = true;
-  const sender = h('input', { type: 'text', name: 'sender_name', maxlength: 15, autocomplete: 'off', placeholder: 'Sender name' });
-  const senderField = field('Sender name', sender, '3 to 11 letters, digits or spaces. Only senders allowed in providers.conf are accepted.');
-  senderField.hidden = true;
-  const provider = () => providers.find((p) => p.name === route.value);
-  const identity = h('div', { class: 'notice info' }, 'Loading gateway identity…');
-  const result = h('div', null);
-  const simOf = (id) => sims.find((x) => x.modem === id);
-  const number = (x) => (x && x.configured && x.configured.mobile_number) || 'no number configured';
-
-  function drawIdentity() {
-    const p = provider();
-    senderField.hidden = !p;
-    modemField.hidden = !!p || sims.length < 2;
-    flash.el.hidden = !!p;
-    if (p) {
-      flash.input.checked = false;
-      return fill(identity,
-        h('strong', null, 'Sending as: '), h('span', { class: 'mono' }, sender.value.trim() || p.default_sender || 'no sender set'), ` (provider ${p.name})`,
-        h('div', { class: 'muted small-text' }, `The message is handed to the provider over the internet and billed by the provider.${p.delivery_callbacks ? '' : ' Delivery status is not reported back because no callback secret is configured.'} Some countries replace or reject sender names.`));
-    }
-    const chosen = modem.value ? [simOf(modem.value)].filter(Boolean) : sims;
-    fill(identity,
-      h('strong', null, 'Sending as: '),
-      chosen.length ? chosen.map((x, i) => [i ? ' or ' : '', h('span', { class: 'mono' }, number(x)), ` (${x.modem}${x.configured && x.configured.name ? ', SIM ' + x.configured.name : ''}, SIM ${x.state})`]) : 'unknown',
-      h('div', { class: 'muted small-text' }, 'This is the number configured for the physical SIM. The mobile network decides which sender recipients actually see; it cannot be chosen here.'));
-  }
-
-  const estimate = debounce(async () => {
-    const my = ++estSeq;
-    if (!msg.value) return fill(est, '0 characters');
-    try {
-      const e = await post('/sms/estimate', { message: msg.value, flash: flash.input.checked });
-      if (my !== estSeq || !alive) return;
-      fill(est, `${e.characters} characters · encoding `, h('strong', null, e.encoding), ` · ${e.parts} segment${e.parts === 1 ? '' : 's'} (${e.units_per_part} units each) · ${e.units_remaining} units left in the last segment`,
-        e.exceeds_limit ? h('div', { class: 'bad-text' }, `Too long: the gateway allows at most ${app.cfg.max_message_parts} segments.`) : null);
-    } catch (e) {
-      if (my === estSeq && alive) fill(est, h('span', { class: 'bad-text' }, e.message));
-    }
-  }, 350);
-  msg.addEventListener('input', () => {
-    fill(est, `${[...msg.value].length} characters · estimating…`);
-    estimate();
-  });
-  flash.input.addEventListener('change', estimate);
-  modem.addEventListener('change', drawIdentity);
-  route.addEventListener('change', () => {
-    const p = provider();
-    sender.value = p ? p.default_sender : '';
-    drawIdentity();
-    estimate();
-  });
-  sender.addEventListener('input', drawIdentity);
-
-  function track(id) {
-    const box = h('div', null, h('p', { class: 'muted' }, 'Waiting for status…'));
-    fill(result, h('section', { class: 'card' }, h('header', { class: 'card-head' }, h('h2', null, 'Submitted message')),
-      kv([['Message id', button(id, () => openMessage(id), 'link mono')]]), box));
-    let n = 0;
-    const poll = async () => {
-      if (!alive) return;
-      let stop = false;
-      try {
-        const st = await get(`/messages/${encodeURIComponent(id)}/status`);
-        stop = FINAL.includes(st.status) || st.status === 'scheduled' || ++n > 80;
-        fill(box,
-          h('p', { 'aria-live': 'polite' }, 'Current status: ', badge(st.status), st.delivery_status ? [' delivery: ', badge(st.delivery_status)] : null,
-            FINAL.includes(st.status) ? ' (final)' : stop ? ' — no longer watching; see Outbox for later changes.' : ' — watching…'),
-          st.error ? notice('bad', st.error) : null,
-          table([{ label: 'Time', get: (x) => fmtTime(x.created_at) }, { label: 'Status', get: (x) => badge(x.status) }, { label: 'Detail', get: (x) => x.detail }], st.history, { empty: 'No status history yet.' }));
-      } catch (e) {
-        fill(box, errorBox(e));
-        stop = e.status === 404 || ++n > 80;
-      }
-      if (!stop) timer = setTimeout(poll, n < 10 ? 1000 : 3000);
-    };
-    clearTimeout(timer);
-    poll();
-  }
-
-  const form = h('form', { class: 'form card', novalidate: true, onsubmit: async (e) => {
-    e.preventDefault();
-    const body = { to: to.value.trim(), message: msg.value, priority: prio.value };
-    if (!body.to || !body.message) return toast('Enter a destination number and a message.', 'bad');
-    if (flash.input.checked) body.flash = true;
-    if (report.value) body.delivery_report = report.value === 'true';
-    if (when.value) {
-      const d = new Date(when.value);
-      if (isNaN(d)) return toast('The schedule time is not valid.', 'bad');
-      body.scheduled_at = d.toISOString();
-    }
-    const via = provider();
-    if (via) {
-      body.provider = via.name;
-      if (sender.value.trim()) body.sender_name = sender.value.trim();
-      if (!body.sender_name && !via.default_sender) return toast('Enter a sender name.', 'bad');
-      delete body.flash;
-      delete body.delivery_report;
-    } else if (modem.value) body.modem = modem.value;
-    const ok = await confirmBox('Send this SMS?', [
-      kv([
-        ['To', h('span', { class: 'mono' }, body.to)],
-        ['Sending as', via ? `${body.sender_name || via.default_sender} (provider ${via.name})` : modem.value ? `${number(simOf(modem.value))} (${modem.value})` : sims.length === 1 ? `${number(sims[0])} (${sims[0].modem})` : 'chosen automatically by the gateway'],
-        ['Priority', body.priority],
-        ['Delivery report', via ? (via.delivery_callbacks ? 'reported by the provider' : 'not available (no callback secret)') : report.value ? (body.delivery_report ? 'requested' : 'not requested') : 'gateway default'],
-        ['Flash', body.flash ? 'yes' : 'no'],
-        ['Scheduled', body.scheduled_at ? fmtTime(body.scheduled_at) : 'send as soon as possible'],
-      ]),
-      h('pre', { class: 'body' }, body.message),
-      h('p', { class: 'muted' }, via ? 'A real SMS will be sent through the provider and billed to the provider account.' : 'A real SMS will be transmitted through the modem.'),
-    ], body.scheduled_at ? 'Schedule SMS' : 'Send SMS');
-    if (!ok) return;
-    const key = window.crypto && crypto.randomUUID ? crypto.randomUUID() : null;
-    await busy(form.querySelector('button[type=submit]'), async () => {
-      const r = await api('/api/v1/sms/send', { method: 'POST', body, headers: key ? { 'Idempotency-Key': key } : {} });
-      toast(`Queued as ${r.message_id} (${r.parts} segment${r.parts === 1 ? '' : 's'}, ${r.encoding})`, 'ok');
-      msg.value = '';
-      fill(est, '0 characters');
-      track(r.message_id);
-    });
-  } },
-    h('header', { class: 'card-head' }, h('h2', null, 'Send SMS')),
-    identity,
-    field('Destination number', to, 'International format, for example +4500000000.'),
-    field('Message', msg),
-    est,
-    h('div', { class: 'cols' }, field('Delivery report', report), field('Priority', prio), field('Schedule (optional)', when, 'Local time; leave empty to send now.'), routeField, modemField, senderField),
-    flash.el,
-    h('div', { class: 'row' }, h('button', { type: 'submit', class: 'btn primary' }, 'Review and send')));
-  root.append(form, result);
-
-  get('/sims').then((list) => {
-    if (!alive) return;
-    sims = list || [];
-    if (sims.length > 1) {
-      modemField.hidden = !!provider();
-      fill(modem, h('option', { value: '' }, 'Automatic'), sims.map((x) => h('option', { value: x.modem }, `${x.modem} — ${number(x)}${x.ready ? '' : ' (SIM ' + x.state + ')'}`)));
-    }
-    drawIdentity();
-  }).catch((e) => alive && fill(identity, errorBox(e)));
-
-  get('/providers').then((d) => {
-    if (!alive) return;
-    providers = ((d && d.providers) || []).filter((p) => p.enabled);
-    if (!providers.length) return;
-    fill(route, h('option', { value: '' }, 'Modem (SIM number)'), providers.map((p) => h('option', { value: p.name }, `Provider ${p.name}${p.default_sender ? ' — ' + p.default_sender : ''}`)));
-    routeField.hidden = false;
-  }).catch(() => {});
-
-  return { destroy: () => { alive = false; clearTimeout(timer); } };
 }
 
 // ---- inbox / outbox / history ---------------------------------------------------------

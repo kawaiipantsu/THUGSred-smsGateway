@@ -1,22 +1,24 @@
 // THUGSred SMS Gateway dashboard: start-up, routing, authentication and live updates.
 
 import { app, h, fill, api, setToken, errorBox, button, dialog, field, toast, debounce } from './core.js';
-import { overview, send, inbox, outbox, history, queue } from './pages-main.js';
+import { overview, inbox, outbox, history as historyPage, queue, openMessage } from './pages-main.js';
+import { send, contacts } from './pages-send.js';
 import { pdu, calls, integrations, modem, system, apidocs } from './pages-more.js';
 
 const ROUTES = {
   overview: ['Overview', overview],
   send: ['Send SMS', send],
+  contacts: ['Contacts', contacts],
   inbox: ['Inbox', inbox],
   outbox: ['Outbox', outbox],
-  history: ['Message History', history],
+  history: ['Message History', historyPage],
   queue: ['Message Queue', queue],
   pdu: ['PDU Tools', pdu],
   calls: ['Calls', calls],
   integrations: ['Integrations', integrations],
   modem: ['Modem', modem],
   system: ['System', system],
-  api: ['API Documentation', apidocs],
+  docs: ['API Documentation', apidocs],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -63,18 +65,30 @@ $('nav').addEventListener('click', (e) => {
   if (e.target.closest('a')) setNav(false);
 });
 
+/** Page name of the current address ("/" is the overview). */
+function pageName() {
+  return (location.pathname.replace(/^\/+|\/+$/g, '') || 'overview').toLowerCase();
+}
+
+/** Go to another dashboard page without reloading the document. */
+function navigate(url, replace) {
+  if (replace) history.replaceState(null, '', url);
+  else history.pushState(null, '', url);
+  route();
+}
+
 function route() {
-  const name = (location.hash.replace(/^#\/?/, '').split(/[/?]/)[0] || 'overview').toLowerCase();
+  const name = pageName();
   const entry = ROUTES[name];
   if (!entry) {
-    location.hash = '#/overview';
+    navigate('/overview', true);
     return;
   }
   if (current && current.destroy) current.destroy();
   current = null;
   document.querySelectorAll('dialog.modal').forEach((d) => d.close());
   for (const a of $('nav').querySelectorAll('a')) {
-    if (a.getAttribute('href') === '#/' + name) a.setAttribute('aria-current', 'page');
+    if (a.getAttribute('href') === '/' + name) a.setAttribute('aria-current', 'page');
     else a.removeAttribute('aria-current');
   }
   document.title = `${entry[0]} · ${app.cfg.title || 'THUGSred SMS Gateway'}`;
@@ -85,7 +99,21 @@ function route() {
     main.appendChild(errorBox(e));
   }
   window.scrollTo(0, 0);
+  // Deep link to one message: /history?message=<id>
+  const message = new URLSearchParams(location.search).get('message');
+  if (message) openMessage(message);
 }
+
+// Links to dashboard pages are handled here; everything else is left to the browser.
+document.addEventListener('click', (e) => {
+  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+  const a = e.target.closest && e.target.closest('a[href]');
+  if (!a || a.target || a.hasAttribute('download')) return;
+  const url = new URL(a.href, location.href);
+  if (url.origin !== location.origin || !ROUTES[url.pathname.replace(/^\/+|\/+$/g, '') || 'overview']) return;
+  e.preventDefault();
+  if (url.pathname + url.search !== location.pathname + location.search) navigate(url.pathname + url.search);
+});
 
 function refresh() {
   if (document.hidden || !current || !current.refresh) return;
@@ -225,6 +253,11 @@ async function start() {
   startPolling();
 }
 
-window.addEventListener('hashchange', route);
+window.addEventListener('popstate', route);
+// Addresses of earlier versions used "#/page"; move them to the real path.
+if (/^#\//.test(location.hash)) {
+  const old = location.hash.slice(2).replace(/^api(?=$|[/?])/, 'docs');
+  history.replaceState(null, '', '/' + old);
+}
 applyTheme(storedTheme() || 'dark');
 start();

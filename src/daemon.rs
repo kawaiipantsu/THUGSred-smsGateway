@@ -49,6 +49,14 @@ pub struct ConfigStatus {
 
 type LevelHook = Box<dyn Fn(&str) + Send + Sync>;
 
+/// Combine saved contacts with those of addressbook.conf. Saved contacts
+/// come first, so they take precedence for the same number.
+pub fn merge_contacts(cfg: &mut Config, mut saved: Vec<config::Contact>) {
+    cfg.contacts.retain(|c| c.source != "saved");
+    saved.append(&mut cfg.contacts);
+    cfg.contacts = saved;
+}
+
 pub struct Gateway {
     pub cfg: SharedConfig,
     pub db: Db,
@@ -100,6 +108,11 @@ impl Gateway {
             warnings: cfg.warnings.clone(),
             ..Default::default()
         };
+        let mut cfg = cfg;
+        match db.saved_contacts().await {
+            Ok(saved) => merge_contacts(&mut cfg, saved),
+            Err(e) => tracing::warn!(error = %e, "saved contacts could not be loaded"),
+        }
         let shared = config::shared(cfg);
         let metrics = Arc::new(Metrics::new());
         let events = Events::new(db.clone(), shared.clone(), metrics.clone());
@@ -214,14 +227,35 @@ impl Gateway {
             .clone()
     }
 
+    /// Re-read saved contacts after one was added, changed or removed.
+    pub async fn refresh_contacts(&self) -> Result<(), crate::database::DbError> {
+        let saved = self.db.saved_contacts().await?;
+        let mut cfg = (*self.cfg.load_full()).clone();
+        merge_contacts(&mut cfg, saved);
+        self.cfg.store(Arc::new(cfg));
+        Ok(())
+    }
+
     /// Reload configuration from disk. An invalid configuration is rejected
     /// as a whole and the running configuration stays in effect.
     pub async fn reload(&self) -> Result<Vec<String>, ConfigError> {
         let result = config::load(&self.load_options);
         let now = utils::now();
         match result {
-            Ok(new) => {
+            Ok(mut new) => {
                 let old = self.cfg.load_full();
+                match self.db.saved_contacts().await {
+                    Ok(saved) => merge_contacts(&mut new, saved),
+                    // Keep the names already known rather than losing them.
+                    Err(_) => merge_contacts(
+                        &mut new,
+                        old.contacts
+                            .iter()
+                            .filter(|c| c.source == "saved")
+                            .cloned()
+                            .collect(),
+                    ),
+                }
                 let restart: Vec<String> = old
                     .restart_required(&new)
                     .into_iter()

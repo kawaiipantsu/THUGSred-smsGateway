@@ -205,16 +205,30 @@ pub(crate) fn get_b(row: &AnyRow, col: &str) -> Option<Vec<u8>> {
     row.try_get::<Option<Vec<u8>>, _>(col).ok().flatten()
 }
 
-const MIGRATIONS_SQLITE: &[(i64, &str, &str)] = &[(
-    1,
-    "initial",
-    include_str!("../../migrations/sqlite/0001_initial.sql"),
-)];
-const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[(
-    1,
-    "initial",
-    include_str!("../../migrations/mysql/0001_initial.sql"),
-)];
+const MIGRATIONS_SQLITE: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "initial",
+        include_str!("../../migrations/sqlite/0001_initial.sql"),
+    ),
+    (
+        2,
+        "contacts",
+        include_str!("../../migrations/sqlite/0002_contacts.sql"),
+    ),
+];
+const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[
+    (
+        1,
+        "initial",
+        include_str!("../../migrations/mysql/0001_initial.sql"),
+    ),
+    (
+        2,
+        "contacts",
+        include_str!("../../migrations/mysql/0002_contacts.sql"),
+    ),
+];
 
 fn split_statements(sql: &str) -> Vec<String> {
     let cleaned: String = sql

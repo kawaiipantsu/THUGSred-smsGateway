@@ -314,6 +314,11 @@ config_struct! {
 pub struct Contact {
     pub name: String = String::new(),
     pub number: String = String::new(),
+    pub note: String = String::new(),
+    /// Identifier of a contact saved through the dashboard or API.
+    pub id: String = String::new(),
+    /// "file" (addressbook.conf) or "saved" (stored in the database).
+    pub source: String = s("file"),
 }}
 
 config_struct! {

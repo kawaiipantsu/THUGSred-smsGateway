@@ -96,6 +96,7 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 | Flash (class 0) and 8-bit binary SMS with application ports | ✅ | Not yet verified on real hardware |
 | Delivery reports correlated with sent messages | ✅ | Verified for one single-part message on a SIM868 over a real network |
 | Scheduled sending, priorities, expiry, cancel and retry | ✅ | |
+| Contacts saved from the dashboard or API, next to `addressbook.conf` | ✅ | |
 | Sending through an SMS provider (GatewayAPI) with a sender name | 🧪 | Optional route; tested against a stand-in for the provider API, not against the real service. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | Idempotent submission (`Idempotency-Key`) | ✅ | |
 | Per-SIM daily/monthly quotas, rate limits, allow and block lists | ✅ | |
@@ -527,6 +528,15 @@ of plain ES modules without a build step, loads no assets from other hosts, and 
 API data through text nodes. When bearer authentication is enabled it asks for a token and
 keeps it in the browser's session storage only. It updates live through the event stream,
 with polling as a fallback, and has a dark/light toggle that is remembered per browser.
+
+Every page has its own address (`/send`, `/contacts`, `/inbox`, …), so pages can be reloaded,
+bookmarked and linked to, and the browser's back button works. `/send?to=<number>` opens the
+composer for a recipient and `?message=<id>` opens one message. Addresses of the older
+`/#/page` form are redirected.
+
+The Send page is a composer with contact search, a live segment counter, a preview and a
+choice between modem and SMS provider. The Contacts page saves names for numbers; saved
+contacts can be picked when sending and are shown instead of numbers throughout.
 
 It has been exercised in headless Chromium against the simulator only.
 

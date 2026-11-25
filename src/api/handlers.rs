@@ -893,6 +893,120 @@ pub async fn addressbook(State(s): S) -> ApiResult {
     )
 }
 
+fn contact_json(cfg: &crate::config::Config, c: &crate::config::Contact) -> Value {
+    json!({
+        "id": if c.id.is_empty() { Value::Null } else { json!(c.id) },
+        "name": c.name,
+        "number": c.number,
+        "note": c.note,
+        "source": c.source,
+        "editable": c.source == "saved",
+        "anonymous": cfg.is_anonymous(&c.number),
+    })
+}
+
+/// Saved contacts and address book entries, ordered by name.
+pub async fn contacts(State(s): S) -> ApiResult {
+    let cfg = s.gw.cfg.load_full();
+    let mut list: Vec<&crate::config::Contact> = cfg.contacts.iter().collect();
+    list.sort_by_key(|c| (c.name.to_lowercase(), c.number.clone()));
+    ok(json!({"contacts": list.iter().map(|c| contact_json(&cfg, c)).collect::<Vec<_>>()}))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContactBody {
+    name: String,
+    number: String,
+    #[serde(default)]
+    note: String,
+}
+
+fn contact_fields(b: ContactBody) -> Result<(String, String, String), ApiError> {
+    let name = b.name.trim().to_string();
+    let note = b.note.trim().to_string();
+    let number = utils::normalize_number(&b.number);
+    if name.is_empty() || name.chars().count() > 100 || name.chars().any(char::is_control) {
+        return Err(ApiError::bad_request("name must be 1 to 100 characters"));
+    }
+    if note.chars().count() > 500 {
+        return Err(ApiError::bad_request("note is limited to 500 characters"));
+    }
+    if !crate::config::valid_number(&number) || number.trim_start_matches('+').len() < 3 {
+        return Err(ApiError::bad_request(
+            "number must be a telephone number: digits with an optional leading '+'",
+        ));
+    }
+    Ok((name, number, note))
+}
+
+fn contact_conflict(e: crate::database::DbError) -> ApiError {
+    if e.is_unique_violation() {
+        ApiError::conflict("a saved contact with this number already exists")
+    } else {
+        e.into()
+    }
+}
+
+async fn saved_contact(s: &AppState, id: &str) -> ApiResult {
+    s.gw.refresh_contacts().await?;
+    let cfg = s.gw.cfg.load_full();
+    let c = cfg
+        .contacts
+        .iter()
+        .find(|c| c.source == "saved" && c.id == id)
+        .ok_or_else(|| ApiError::not_found("contact not found"))?;
+    ok(contact_json(&cfg, c))
+}
+
+pub async fn contact_create(
+    State(s): S,
+    Extension(ctx): C,
+    ApiJson(b): ApiJson<ContactBody>,
+) -> Result<Response, ApiError> {
+    let (name, number, note) = contact_fields(b)?;
+    let id =
+        s.gw.db
+            .insert_contact(&name, &number, &note)
+            .await
+            .map_err(contact_conflict)?;
+    audit(&s, &ctx, "contact.create", Some(&id), None).await;
+    let body = saved_contact(&s, &id).await?;
+    Ok((StatusCode::CREATED, body).into_response())
+}
+
+pub async fn contact_update(
+    State(s): S,
+    Extension(ctx): C,
+    Path(id): Path<String>,
+    ApiJson(b): ApiJson<ContactBody>,
+) -> ApiResult {
+    let (name, number, note) = contact_fields(b)?;
+    let found =
+        s.gw.db
+            .update_contact(&id, &name, &number, &note)
+            .await
+            .map_err(contact_conflict)?;
+    if !found {
+        return Err(ApiError::not_found(
+            "contact not found (entries of addressbook.conf are changed in that file)",
+        ));
+    }
+    audit(&s, &ctx, "contact.update", Some(&id), None).await;
+    saved_contact(&s, &id).await
+}
+
+pub async fn contact_delete(State(s): S, Extension(ctx): C, Path(id): Path<String>) -> ApiResult {
+    if !s.gw.db.delete_contact(&id).await? {
+        return Err(ApiError::not_found(
+            "contact not found (entries of addressbook.conf are changed in that file)",
+        ));
+    }
+    s.gw.refresh_contacts().await?;
+    audit(&s, &ctx, "contact.delete", Some(&id), None).await;
+    ok(json!({"deleted": true}))
+}
+
 pub async fn messages(State(s): S, ApiQuery(q): ApiQuery<MessagesQ>) -> ApiResult {
     let mq = message_query(&q, 500)?;
     let (rows, total) = s.gw.db.search_messages(&mq).await?;

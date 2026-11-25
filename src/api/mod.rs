@@ -281,6 +281,7 @@ pub async fn audit(
 /// needs to render its login prompt (title, theme; no secrets).
 fn is_public_asset(path: &str) -> bool {
     path == "/"
+        || web::is_page(path)
         || path == "/favicon.svg"
         || path.starts_with("/assets/")
         || path == "/api/v1/ui/config"
@@ -569,6 +570,11 @@ pub fn router(gw: Arc<Gateway>) -> Router {
         .route("/diagnostics", get(h::diagnostics))
         .route("/database/backup", post(h::db_backup))
         .route("/addressbook", get(h::addressbook))
+        .route("/contacts", get(h::contacts).post(h::contact_create))
+        .route(
+            "/contacts/{id}",
+            post(h::contact_update).delete(h::contact_delete),
+        )
         .route("/ui/config", get(h::ui_config))
         .route("/openapi.json", get(openapi::serve));
     let mut app = Router::new()
@@ -583,6 +589,9 @@ pub fn router(gw: Arc<Gateway>) -> Router {
             .route("/", get(web::index))
             .route("/favicon.svg", get(web::favicon))
             .route("/assets/{*path}", get(web::asset));
+        for page in web::PAGES {
+            app = app.route(&format!("/{page}"), get(web::index));
+        }
     }
     app.fallback(fallback)
         .layer(axum::middleware::from_fn_with_state(state.clone(), guard))

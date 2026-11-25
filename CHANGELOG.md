@@ -9,6 +9,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Contacts.** Contacts can be saved, changed and deleted from a new Contacts page and
+  through `/api/v1/contacts`. They are stored in the database (migration `0002_contacts`),
+  apply without a reload and complement `addressbook.conf`.
+- **Send page.** Redesigned composer: contact search and quick pick, recipient chip, live
+  segment meter, message preview, modem/provider switch, delivery progress.
+- **Page addresses.** Dashboard pages use real paths (`/send`, `/contacts`, …) instead of
+  `#/` fragments, so reload, back/forward and deep links work; `/send?to=` and `?message=`
+  are supported and old fragment addresses are redirected. The API documentation page moved
+  to `/docs`.
+
 - **SMS providers.** Optional outbound routes through an SMS provider's API, configured in
   `providers.conf`. First provider type: `gatewayapi`. A request selects one with `provider`
   or `sender_name`, which lets a message show an allowed sender name instead of a SIM

@@ -450,6 +450,31 @@ fn ops() -> Vec<Op> {
         ),
         op(
             "get",
+            "/api/v1/contacts",
+            "Contacts",
+            "Saved contacts and address book entries (names shown for numbers)",
+        ),
+        Op {
+            body: Some(r#"{"name": "Alice", "number": "+4500000000", "note": "On-call"}"#),
+            ..op("post", "/api/v1/contacts", "Contacts", "Save a contact")
+        },
+        Op {
+            body: Some(r#"{"name": "Alice", "number": "+4500000000", "note": ""}"#),
+            ..op(
+                "post",
+                "/api/v1/contacts/{id}",
+                "Contacts",
+                "Change a saved contact",
+            )
+        },
+        op(
+            "delete",
+            "/api/v1/contacts/{id}",
+            "Contacts",
+            "Delete a saved contact",
+        ),
+        op(
+            "get",
             "/api/v1/addressbook",
             "Status",
             "Address book entries",

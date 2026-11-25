@@ -678,7 +678,10 @@ Regular expressions are validated at load time.
 
 ## addressbook.conf
 
-Optional. Applies on reload. Two notations, which may be mixed:
+Optional. Applies on reload. Contacts can also be saved from the dashboard's Contacts page or
+through `/api/v1/contacts`; those are stored in the database, need no reload, and take
+precedence over an entry of this file for the same number. Entries of this file are shown
+as read-only there. Two notations, which may be mixed:
 
 ```toml
 [contacts]

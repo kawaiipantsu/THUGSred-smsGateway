@@ -1029,6 +1029,10 @@ is true.
 | GET | `/api/v1/diagnostics` | yes | Redacted diagnostic report |
 | POST | `/api/v1/database/backup` | yes | Create and verify a database backup (SQLite) |
 | GET | `/api/v1/addressbook` | | Contacts and a summary of the anonymous list |
+| GET | `/api/v1/contacts` | | Saved contacts and address book entries, ordered by name. Each has `id` (saved contacts only), `name`, `number`, `note`, `source` (`saved` or `file`), `editable`, `anonymous`. |
+| POST | `/api/v1/contacts` | | Save a contact: `{"name", "number", "note"}`. `201` with the contact; `409` when the number is already saved. Names apply at once to messages, events and integrations. |
+| POST | `/api/v1/contacts/{id}` | | Change a saved contact (same body). `404` for file entries. |
+| DELETE | `/api/v1/contacts/{id}` | | Delete a saved contact |
 
 Reload:
 
