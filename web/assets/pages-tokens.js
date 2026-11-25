@@ -58,7 +58,7 @@ export function tokens(root) {
 
   async function load() {
     try {
-      const d = await get('/tokens');
+      const d = (await api('/api/v1/tokens', { noAuthPrompt: true })).data;
       if (!alive) return;
       const rows = d.tokens || [];
       fill(body, table([

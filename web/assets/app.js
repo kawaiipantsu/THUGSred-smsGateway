@@ -29,6 +29,7 @@ const $ = (id) => document.getElementById(id);
 const main = $('main');
 let current = null;
 let live = false;
+let authNeeded = false;
 let streamGen = 0;
 let pollTimer = null;
 let ticks = 0;
@@ -166,7 +167,7 @@ document.addEventListener('click', (e) => {
 });
 
 function refresh() {
-  if (document.hidden || !current || !current.refresh) return;
+  if (authNeeded || document.hidden || !current || !current.refresh) return;
   if (document.querySelector('dialog.modal[open]')) return; // do not move things under an open dialog
   current.refresh(false);
 }
@@ -268,7 +269,16 @@ function tokenPrompt(message) {
   input.focus();
 }
 
-app.onUnauthorized = tokenPrompt;
+app.onUnauthorized = (message) => {
+  // A rejected request means the token is missing or invalid. Stop the
+  // background polling and event stream so their 401s do not keep reopening
+  // this prompt; both resume once a valid token is accepted (via start()).
+  authNeeded = true;
+  streamGen++;
+  clearInterval(pollTimer);
+  setLive(false);
+  tokenPrompt(message);
+};
 $('token-btn').addEventListener('click', () => tokenPrompt(null));
 $('forget-btn').addEventListener('click', () => {
   setToken(null);
@@ -283,6 +293,7 @@ async function start() {
   $('token-btn').textContent = app.token ? 'Change token' : 'Set token';
   streamGen++;
   clearInterval(pollTimer);
+  authNeeded = false;
   try {
     app.cfg = (await api('/api/v1/ui/config')).data || {};
   } catch (e) {
