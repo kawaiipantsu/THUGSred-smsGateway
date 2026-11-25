@@ -123,6 +123,22 @@ Details:
   `Access-Control-Allow-Origin`; allowed methods are `GET, POST, DELETE, OPTIONS`, allowed
   headers `Authorization, Content-Type, Idempotency-Key, X-Request-Id`.
 
+### Creating bearer tokens
+
+Tokens are configuration values, not minted at runtime; there is no token-management UI.
+To let a remote system authenticate:
+
+1. Generate a strong random token, for example `openssl rand -hex 32`.
+2. In `smsgateway.conf` set `[api] authentication = "bearer"` and add the token to
+   `tokens` (ordinary access) or `admin_tokens` (administrative endpoints). Use as many as
+   you like, one per client, and rotate by replacing them. A token may be a secret
+   reference, e.g. `tokens = ["${file:/etc/thugsred/api-token}"]`.
+3. Reload (`systemctl reload thugsred-smsgateway`). Tokens apply on reload.
+
+The client sends `Authorization: Bearer <token>`. Remember check 1: the client's address
+must also be permitted by `api.allowed_cidrs` (and by any reverse-proxy allow rules), so a
+remote integration needs its source IP allowed in addition to a token.
+
 ### Administrative endpoints
 
 Endpoints marked **admin** below additionally require:
@@ -453,6 +469,7 @@ The PIN and the APN password are never returned.
 | --- | --- | --- | --- |
 | POST | `/api/v1/sms/send` | only with `override_allowlist` | Queue a message |
 | POST | `/api/v1/sms/schedule` | only with `override_allowlist` | The same, but `scheduled_at` is required |
+| GET | `/api/v1/sms/routes` | | Available routes: ready modems (with the SIM number) and providers (with each provider's allowed sender names) |
 | POST | `/api/v1/sms/estimate` | | Encoding and part count for a text, without queueing |
 | POST | `/api/v1/sms/send-pdu` | yes | Submit a caller-built SMS-SUBMIT PDU (disabled by default) |
 
@@ -839,6 +856,20 @@ listed in the `attachments` array of `GET /api/v1/messages/{id}`
 | POST | `/api/v1/providers/{name}/callback` | | Delivery status webhook for the provider's servers. `200` with `data.result` (`applied`, `noted`, `ignored`, `duplicate`, `already_final`, `unknown_message`), `401 invalid_signature`, `404` when the provider has no `callback_secret`, `503` when the report should be repeated. |
 
 The send response contains `provider` (name or `null`) and `sender`.
+
+## Security (honeypot)
+
+Detected inbound SMS-layer attacks (SIM Toolkit / Simjacker, silent SMS, WAP provisioning,
+smishing). See [HONEYPOT.md](HONEYPOT.md).
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| GET | `/api/v1/security/events` | Detections, newest first. Filters: `category`, `modem`, `number` (targeted honeypot number), `from`, `to`, `limit`, `offset`. Each row is self-contained — attacker, targeted number, category, severity, `confidence` (0-100), detail, and the joined message (`message_type`, `raw_pdu`, `body`, `metadata`) — so no follow-up call is needed. |
+| GET | `/api/v1/security/stats` | Server-side summary for a `range` (`24h`, `7d`, `30d`, `all`): totals, `avg`/`max` confidence, distinct senders, targeted numbers, first/last seen, and counts by category, severity, number, number×category and day. |
+
+For incremental collection, poll `security/events` with `from=<last created_at>`; for
+real-time, subscribe a webhook integration to the `security.threat_detected` event (the body
+carries the full message and the threat category/severity/confidence).
 
 ## Integrations and deliveries
 

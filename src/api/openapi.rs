@@ -180,6 +180,12 @@ fn ops() -> Vec<Op> {
             "SIM",
             "SIM information for every modem",
         ),
+        op(
+            "get",
+            "/api/v1/sms/routes",
+            "SMS",
+            "Available send routes: ready modems (with the SIM number) and providers (with the sender names each allows)",
+        ),
         Op {
             body: Some(SEND),
             ..op(
@@ -324,6 +330,18 @@ fn ops() -> Vec<Op> {
             "/api/v1/attachments/{id}/download",
             "Messages",
             "Download a stored attachment (application/octet-stream)",
+        ),
+        op(
+            "get",
+            "/api/v1/security/events",
+            "Security",
+            "Detected inbound attacks (honeypot). Query: category, modem, number, from, to, limit, offset",
+        ),
+        op(
+            "get",
+            "/api/v1/security/stats",
+            "Security",
+            "Attack statistics by category, severity and targeted number. Query: range (24h, 7d, 30d, all)",
         ),
         op(
             "get",

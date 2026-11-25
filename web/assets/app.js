@@ -3,6 +3,7 @@
 import { app, h, s, fill, api, setToken, errorBox, button, dialog, field, toast, debounce } from './core.js';
 import { overview, inbox, outbox, history as historyPage, queue, openMessage } from './pages-main.js';
 import { send, contacts } from './pages-send.js';
+import { threats } from './pages-threats.js';
 import { pdu, calls, integrations, modem, system, apidocs } from './pages-more.js';
 
 const ROUTES = {
@@ -13,6 +14,7 @@ const ROUTES = {
   outbox: ['Outbox', outbox],
   history: ['Message History', historyPage],
   queue: ['Message Queue', queue],
+  threats: ['Threats', threats],
   pdu: ['PDU Tools', pdu],
   calls: ['Calls', calls],
   integrations: ['Integrations', integrations],

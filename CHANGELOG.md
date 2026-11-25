@@ -9,6 +9,15 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Honeypot attack classification and statistics.** Inbound attacks are classified
+  individually (`simjacker`, `wibattack`, `sim_ota`, `silent_sms`, `oma_cp`, `smishing`)
+  with a heuristic confidence score (0-100) and stored in a `security_events` table
+  (migration 0003). New read API `/api/v1/security/events` (self-contained rows, filters,
+  incremental `from`) and `/api/v1/security/stats` (server-side counts by category, severity,
+  number and day), a `security.threat_detected` event, and a Threats dashboard page.
+- **Send routes.** `/api/v1/sms/routes` lists the ways to send — ready modems (with the SIM
+  number) and providers (with each provider's allowed sender names). The send API already
+  accepts `modem`, `from`, `provider` and `sender_name`.
 - **SIM Toolkit attack detection (honeypot).** Inbound binary SMS directed at the SIM
   (S@T Browser / WIB pushes of the Simjacker/WIBattack class) are detected, decoded (TAR,
   SPI security level, suspected-attack flag) and stored as `sim_toolkit` messages with the

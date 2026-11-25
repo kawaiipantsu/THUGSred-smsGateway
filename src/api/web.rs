@@ -48,6 +48,7 @@ pub const PAGES: &[&str] = &[
     "outbox",
     "history",
     "queue",
+    "threats",
     "pdu",
     "calls",
     "integrations",

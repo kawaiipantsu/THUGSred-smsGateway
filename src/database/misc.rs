@@ -933,3 +933,140 @@ impl Db {
             == 1)
     }
 }
+
+impl Db {
+    /// Record a detected inbound attack (honeypot classification).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_security_event(
+        &self,
+        m: &Message,
+        category: &str,
+        severity: &str,
+        confidence: i64,
+        detail: &str,
+    ) -> DbResult<()> {
+        self.exec(
+            "INSERT INTO security_events (id, message_id, modem_id, sim_id, sender, recipient, category, severity, confidence, detail, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                utils::new_id(),
+                &m.id,
+                &m.modem_id,
+                &m.sim_id,
+                &m.sender,
+                &m.recipient,
+                category,
+                severity,
+                confidence,
+                detail,
+                utils::now()
+            ],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// List detected attacks, newest first, with optional filters.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn security_events(
+        &self,
+        category: Option<&str>,
+        modem: Option<&str>,
+        number: Option<&str>,
+        from: Option<&str>,
+        to: Option<&str>,
+        limit: i64,
+        offset: i64,
+    ) -> DbResult<(Vec<Json>, i64)> {
+        let mut wh = String::from("1 = 1");
+        let mut ps: Vec<P> = Vec::new();
+        for (clause, value) in [
+            ("category = ?", category),
+            ("modem_id = ?", modem),
+            ("recipient = ?", number),
+            ("created_at >= ?", from),
+            ("created_at <= ?", to),
+        ] {
+            if let Some(v) = value.filter(|v| !v.is_empty()) {
+                wh.push_str(" AND ");
+                wh.push_str(clause);
+                ps.push(v.into());
+            }
+        }
+        let total = self
+            .count(
+                &format!("SELECT COUNT(*) FROM security_events WHERE {wh}"),
+                ps.clone(),
+            )
+            .await?;
+        ps.push(limit.clamp(1, 1000).into());
+        ps.push(offset.max(0).into());
+        // Columns are qualified and joined to the message so a collector gets
+        // the attacker, the raw PDU and the decoded text in one pull.
+        let wh = wh
+            .replace("category = ", "e.category = ")
+            .replace("modem_id = ", "e.modem_id = ")
+            .replace("recipient = ", "e.recipient = ")
+            .replace("created_at >= ", "e.created_at >= ")
+            .replace("created_at <= ", "e.created_at <= ");
+        let sql = format!(
+            "SELECT e.id, e.message_id, e.modem_id, e.sim_id, e.sender, e.recipient, e.category, e.severity, e.confidence, e.detail, e.created_at, m.message_type, m.encoding, m.protocol_id, m.dst_port, m.raw_pdu, m.body, m.network_timestamp, m.metadata FROM security_events e LEFT JOIN messages m ON m.id = e.message_id WHERE {wh} ORDER BY e.created_at DESC LIMIT ? OFFSET ?"
+        );
+        Ok((self.json_rows(&sql, ps).await?, total))
+    }
+
+    /// Attack statistics since `from`: totals and counts by category,
+    /// severity and targeted number.
+    pub async fn security_stats(&self, from: &str) -> DbResult<Json> {
+        let total = self
+            .count(
+                "SELECT COUNT(*) FROM security_events WHERE created_at >= ?",
+                params![from],
+            )
+            .await?;
+        let by_category = self.json_rows(
+            "SELECT category AS k, COUNT(*) AS count, AVG(confidence) AS avg_confidence, MAX(confidence) AS max_confidence, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ? GROUP BY category ORDER BY count DESC",
+            params![from],
+        ).await?;
+        let by_severity = self.json_rows(
+            "SELECT severity AS k, COUNT(*) AS count FROM security_events WHERE created_at >= ? GROUP BY severity ORDER BY count DESC",
+            params![from],
+        ).await?;
+        // Per targeted (honeypot) number: volume, peak confidence, distinct
+        // attackers and when it was last hit.
+        let by_number = self.json_rows(
+            "SELECT recipient AS k, COUNT(*) AS count, MAX(confidence) AS max_confidence, COUNT(DISTINCT sender) AS distinct_senders, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ? GROUP BY recipient ORDER BY count DESC",
+            params![from],
+        ).await?;
+        // Each number broken down by attack category (ready-made for charts).
+        let number_category = self.json_rows(
+            "SELECT recipient AS number, category, COUNT(*) AS count FROM security_events WHERE created_at >= ? GROUP BY recipient, category ORDER BY recipient, count DESC",
+            params![from],
+        ).await?;
+        // Daily counts per category (SUBSTR keeps it portable across engines).
+        let timeline = self.json_rows(
+            "SELECT SUBSTR(created_at, 1, 10) AS day, category, COUNT(*) AS count FROM security_events WHERE created_at >= ? GROUP BY day, category ORDER BY day",
+            params![from],
+        ).await?;
+        let overall = self
+            .json_rows(
+                "SELECT AVG(confidence) AS avg_confidence, MAX(confidence) AS max_confidence, COUNT(DISTINCT sender) AS distinct_senders, COUNT(DISTINCT recipient) AS targeted_numbers, MIN(created_at) AS first_seen, MAX(created_at) AS last_seen FROM security_events WHERE created_at >= ?",
+                params![from],
+            )
+            .await?;
+        let o = overall.into_iter().next().unwrap_or(Json::Null);
+        Ok(serde_json::json!({
+            "total": total,
+            "avg_confidence": o["avg_confidence"],
+            "max_confidence": o["max_confidence"],
+            "distinct_senders": o["distinct_senders"],
+            "targeted_numbers": o["targeted_numbers"],
+            "first_seen": o["first_seen"],
+            "last_seen": o["last_seen"],
+            "by_category": by_category,
+            "by_severity": by_severity,
+            "by_number": by_number,
+            "number_category": number_category,
+            "timeline": timeline,
+        }))
+    }
+}

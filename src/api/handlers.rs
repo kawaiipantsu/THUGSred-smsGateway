@@ -648,6 +648,50 @@ async fn do_send(
     Ok((StatusCode::ACCEPTED, Json(body)).into_response())
 }
 
+/// Every way the API can send, for a client building a request: ready modems
+/// (with the SIM's own number) and configured providers (with the sender
+/// names each one allows). Set `modem` or `from` to pick a modem, or
+/// `provider` with an allowed `sender_name` to send through a provider.
+pub async fn sms_routes(State(s): S) -> ApiResult {
+    let cfg = s.gw.cfg.load_full();
+    let mut modems = Vec::new();
+    for m in cfg.modems.iter().filter(|m| m.enabled) {
+        let sim = s.gw.sms.sim_of(&cfg, &m.id).await;
+        let st =
+            s.gw.modems
+                .iter()
+                .find(|x| x.id == m.id)
+                .map(|x| x.status());
+        modems.push(json!({
+            "modem": m.id,
+            "number": sim.as_ref().map(|si| si.mobile_number.clone()).filter(|n| !n.is_empty()),
+            "sim": sim.as_ref().map(|si| si.id.clone()),
+            "state": st.as_ref().map(|s| s.state.as_str()),
+            "ready": st.as_ref().map(|s| s.is_ready()).unwrap_or(false),
+        }));
+    }
+    let providers = cfg
+        .providers
+        .iter()
+        .filter(|p| p.enabled)
+        .map(|p| json!({
+            "provider": p.name,
+            "display_name": if p.display_name.is_empty() { "SMS Gateway" } else { p.display_name.as_str() },
+            "default_sender": p.default_sender,
+            "allowed_senders": p.allowed_senders,
+            "any_sender_allowed": p.allowed_senders.iter().any(|a| a == "*"),
+            "sender_rules": "3-11 letters/digits/spaces, or a 3-15 digit number",
+        }))
+        .collect::<Vec<_>>();
+    ok(json!({
+        "default_modem": cfg.sms.default_modem,
+        "modems": modems,
+        "providers": providers,
+        "send_enabled": cfg.sms.enabled && cfg.sms.send_enabled,
+        "binary_enabled": cfg.sms.allow_binary,
+    }))
+}
+
 pub async fn sms_send(
     State(s): S,
     Extension(ctx): C,
@@ -1005,6 +1049,70 @@ pub async fn contact_delete(State(s): S, Extension(ctx): C, Path(id): Path<Strin
     s.gw.refresh_contacts().await?;
     audit(&s, &ctx, "contact.delete", Some(&id), None).await;
     ok(json!({"deleted": true}))
+}
+
+#[derive(Deserialize, Default)]
+pub struct SecurityQ {
+    category: Option<String>,
+    modem: Option<String>,
+    number: Option<String>,
+    from: Option<String>,
+    to: Option<String>,
+    limit: Option<i64>,
+    offset: Option<i64>,
+}
+
+/// Detected inbound attacks (honeypot), newest first.
+pub async fn security_events(State(s): S, ApiQuery(q): ApiQuery<SecurityQ>) -> ApiResult {
+    if let Some(c) = q.category.as_deref().filter(|c| !c.is_empty()) {
+        if !crate::sms::threat::CATEGORIES.contains(&c) {
+            return Err(ApiError::bad_request(format!(
+                "category must be one of: {}",
+                crate::sms::threat::CATEGORIES.join(", ")
+            )));
+        }
+    }
+    let from = parse_time("from", &q.from, false)?;
+    let to = parse_time("to", &q.to, true)?;
+    let (rows, total) =
+        s.gw.db
+            .security_events(
+                q.category.as_deref(),
+                q.modem.as_deref(),
+                q.number.as_deref(),
+                from.as_deref(),
+                to.as_deref(),
+                q.limit.unwrap_or(50).clamp(1, 500),
+                q.offset.unwrap_or(0).max(0),
+            )
+            .await?;
+    ok(json!({
+        "events": rows,
+        "total": total,
+        "limit": q.limit.unwrap_or(50).clamp(1, 500),
+        "offset": q.offset.unwrap_or(0).max(0),
+    }))
+}
+
+#[derive(Deserialize, Default)]
+pub struct SecurityStatsQ {
+    range: Option<String>,
+}
+
+/// Attack statistics by category, severity and targeted number.
+pub async fn security_stats(State(s): S, ApiQuery(q): ApiQuery<SecurityStatsQ>) -> ApiResult {
+    let hours = match q.range.as_deref().unwrap_or("30d") {
+        "24h" => 24,
+        "7d" => 7 * 24,
+        "30d" => 30 * 24,
+        "all" => 100 * 365 * 24,
+        _ => return Err(ApiError::bad_request("range must be 24h, 7d, 30d or all")),
+    };
+    let since = Utc::now() - chrono::Duration::hours(hours);
+    let mut stats = s.gw.db.security_stats(&utils::ts(since)).await?;
+    stats["range"] = json!(q.range.as_deref().unwrap_or("30d"));
+    stats["categories"] = json!(crate::sms::threat::CATEGORIES);
+    ok(stats)
 }
 
 pub async fn messages(State(s): S, ApiQuery(q): ApiQuery<MessagesQ>) -> ApiResult {

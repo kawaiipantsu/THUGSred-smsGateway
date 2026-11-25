@@ -511,3 +511,72 @@ async fn detects_sim_toolkit_ota_attack_on_a_honeypot_number() {
     assert_eq!(h.events("security.sim_attack").await.len(), 1);
     h.stop().await;
 }
+
+#[tokio::test]
+async fn classifies_attacks_individually_with_confidence_and_stats() {
+    let h = start(Setup::default()).await;
+    h.ready().await;
+
+    // Silent SMS (Type 0 ping): PID 0x40.
+    let mut silent = DeliverSpec::text("+4511111111", "", ts());
+    silent.payload = Payload::Binary(vec![0x01]);
+    silent.encoding = Encoding::Binary;
+    silent.protocol_identifier = 0x40;
+    h.sim().incoming_sms(&encode_deliver(&silent).unwrap()[0]);
+
+    // Smishing: a link plus lure wording and a shortener.
+    let smish = DeliverSpec::text(
+        "+4522222222",
+        "Your bank account is suspended, verify: https://bit.ly/x",
+        ts(),
+    );
+    h.sim().incoming_sms(&encode_deliver(&smish).unwrap()[0]);
+
+    // A perfectly ordinary text must not be flagged.
+    let ok = DeliverSpec::text("+4533333333", "See you at lunch", ts());
+    h.sim().incoming_sms(&encode_deliver(&ok).unwrap()[0]);
+
+    h.wait_inbound(3).await;
+    // The security event is written just after the message; wait for both.
+    for _ in 0..50 {
+        if h.gw
+            .db
+            .security_stats("1970-01-01T00:00:00Z")
+            .await
+            .unwrap()["total"]
+            == 2
+        {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+
+    let (events, total) =
+        h.gw.db
+            .security_events(None, None, None, None, None, 50, 0)
+            .await
+            .unwrap();
+    assert_eq!(total, 2, "only the two attacks are recorded");
+    let cat = |c: &str| events.iter().find(|e| e["category"] == c).unwrap();
+    assert_eq!(cat("silent_sms")["severity"], "high");
+    let smishing = cat("smishing");
+    assert!(
+        smishing["confidence"].as_i64().unwrap() >= 70,
+        "shortener + lure should score high"
+    );
+    // The row is self-contained: it carries the attacker and the raw PDU.
+    assert_eq!(smishing["sender"], "+4522222222");
+    assert!(smishing["raw_pdu"].as_str().is_some());
+
+    let stats =
+        h.gw.db
+            .security_stats("1970-01-01T00:00:00Z")
+            .await
+            .unwrap();
+    assert_eq!(stats["total"], 2);
+    assert_eq!(stats["distinct_senders"], 2); // two attacker numbers
+    assert_eq!(stats["by_category"].as_array().unwrap().len(), 2);
+    assert!(!stats["timeline"].as_array().unwrap().is_empty());
+    assert_eq!(h.events("security.threat_detected").await.len(), 2);
+    h.stop().await;
+}

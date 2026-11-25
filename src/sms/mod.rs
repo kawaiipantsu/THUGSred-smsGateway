@@ -6,5 +6,6 @@ pub mod ota;
 pub mod pdu;
 pub mod sender;
 mod service;
+pub mod threat;
 
 pub use service::{quota_windows, SendRequest, SmsService, SubmitError, Submitted};

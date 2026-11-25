@@ -216,6 +216,11 @@ const MIGRATIONS_SQLITE: &[(i64, &str, &str)] = &[
         "contacts",
         include_str!("../../migrations/sqlite/0002_contacts.sql"),
     ),
+    (
+        3,
+        "security_events",
+        include_str!("../../migrations/sqlite/0003_security_events.sql"),
+    ),
 ];
 const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[
     (
@@ -227,6 +232,11 @@ const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[
         2,
         "contacts",
         include_str!("../../migrations/mysql/0002_contacts.sql"),
+    ),
+    (
+        3,
+        "security_events",
+        include_str!("../../migrations/mysql/0003_security_events.sql"),
     ),
 ];
 

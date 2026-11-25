@@ -198,6 +198,21 @@ function modemCard(m) {
     ]));
 }
 
+function providerCard(p) {
+  const senders = p.any_sender_allowed ? 'any (configured)' : p.allowed_senders && p.allowed_senders.length ? p.allowed_senders.join(', ') : p.default_sender ? 'default only' : 'none';
+  const usage = (used, limit) => (limit ? `${used} / ${limit} segments` : `${used} segments`);
+  return h('div', { class: 'modem gateway' },
+    h('div', { class: 'row wrap' }, badge('remote SMS gateway', 'info'), h('strong', null, p.display_name || 'SMS Gateway'), p.enabled ? badge('enabled', 'ok') : badge('disabled', 'muted'), badge(p.type)),
+    kv([
+      ['Provider', h('span', { class: 'mono' }, p.name)],
+      ['Default sender', p.default_sender ? h('span', { class: 'mono' }, p.default_sender) : dash(null)],
+      ['Allowed senders', senders],
+      ['Delivery reports', p.delivery_callbacks ? badge('via callback', 'ok') : badge('not configured', 'muted')],
+      ['Today', usage(p.segments_today, p.daily_sms_limit)],
+      ['This month', usage(p.segments_this_month, p.monthly_sms_limit)],
+    ]));
+}
+
 export function overview(root) {
   let range = '24h';
   // The status document feeds several cards; fetch it once per refresh.
@@ -230,9 +245,14 @@ export function overview(root) {
       tile('Failed', m.failed, m.submission_unknown ? `${m.submission_unknown} with unknown outcome` : null),
       tile('Pending queue', st.queue ? st.queue.pending : '—'));
   }, { cls: 'span2' });
-  const modems = panel('Modems', async () => {
+  const modems = panel('Modems / SMS Gateway', async () => {
     const st = await status();
-    return st.modems.length ? h('div', { class: 'modems' }, st.modems.map(modemCard)) : h('p', { class: 'muted' }, 'No modems configured.');
+    let providers = [];
+    try {
+      providers = ((await get('/providers')) || {}).providers || [];
+    } catch (_) { /* providers are optional */ }
+    const cards = st.modems.map(modemCard).concat(providers.map(providerCard));
+    return cards.length ? h('div', { class: 'modems' }, cards) : h('p', { class: 'muted' }, 'No modems or SMS gateways configured.');
   }, { cls: 'span2' });
   const rangeBtns = h('div', { class: 'seg', role: 'group', 'aria-label': 'Time range' });
   const drawRange = () => fill(rangeBtns, ['24h', '7d', '30d'].map((r) => button(r === '24h' ? '24 h' : r === '7d' ? '7 d' : '30 d', () => {

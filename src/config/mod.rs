@@ -28,6 +28,7 @@ pub const KNOWN_EVENTS: &[&str] = &[
     "sms.service_received",
     "sms.ota_toolkit",
     "security.sim_attack",
+    "security.threat_detected",
     "mms.notification",
     "mms.received",
     "ussd.response",

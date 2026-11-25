@@ -6,6 +6,7 @@ use super::pdu::decode::{Deliver, StatusReport};
 use super::pdu::types::{decode_payload_text, Alphabet};
 use super::pdu::{self, Pdu, PduDirection};
 use super::service::SmsService;
+use super::threat;
 use crate::config::Config;
 use crate::database::{Message, Part};
 use crate::events::message_data;
@@ -310,8 +311,18 @@ impl SmsService {
         if !missing.is_empty() {
             metadata["missing_parts"] = json!(missing);
         }
-        if let Some(ota) = ota::analyze(d, payload) {
-            metadata["sim_toolkit"] = json!(ota);
+        let ota = ota::analyze(d, payload);
+        if let Some(o) = &ota {
+            metadata["sim_toolkit"] = json!(o);
+        }
+        if let Some(t) = threat::classify(
+            message_type,
+            d.protocol_identifier,
+            ports.map(|p| p.destination),
+            text.as_deref(),
+            ota.as_ref(),
+        ) {
+            metadata["threat"] = json!(t);
         }
         let (mut sender, mut body) = (d.sender.number.clone(), text);
         if let Some(n) = &notification {
@@ -510,8 +521,41 @@ impl SmsService {
                 .emit("sms.multipart_completed", Some(&m.id), data)
                 .await;
         }
-        // Honeypot alert: a SIM Toolkit OTA push (possible Simjacker/WIBattack)
-        // also raises a dedicated security event for real-time collectors.
+        // Detected inbound attack: record it for honeypot statistics and raise
+        // a real-time alert for remote collectors.
+        if let Some(t) = m
+            .metadata
+            .as_ref()
+            .and_then(|j| j.get("threat"))
+            .filter(|v| v.is_object())
+            .cloned()
+        {
+            let category = t["category"].as_str().unwrap_or("unknown");
+            let severity = t["severity"].as_str().unwrap_or("info");
+            let confidence = t["confidence"].as_i64().unwrap_or(0);
+            let detail = t["detail"].as_str().unwrap_or("");
+            if let Err(e) = self
+                .db
+                .insert_security_event(&m, category, severity, confidence, detail)
+                .await
+            {
+                tracing::error!(error = %e, "failed to record security event");
+            }
+            self.metrics.inc(
+                "smsgw_security_events_total",
+                &[
+                    ("category", category),
+                    ("modem", m.modem_id.as_deref().unwrap_or("")),
+                ],
+            );
+            let mut d = message_data(&m);
+            d["threat"] =
+                json!({"category": category, "severity": severity, "confidence": confidence});
+            self.events
+                .emit("security.threat_detected", Some(&m.id), d)
+                .await;
+        }
+        // Back-compatible dedicated alert for SIM Toolkit OTA pushes.
         if m.message_type == ota::OtaAnalysis::MESSAGE_TYPE {
             self.events
                 .emit("security.sim_attack", Some(&m.id), message_data(&m))

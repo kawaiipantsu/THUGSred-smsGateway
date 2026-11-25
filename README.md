@@ -110,6 +110,7 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 | MMS sending | ❌ | |
 | USSD (named commands, optional arbitrary codes) | 🔌 | |
 | SIM Toolkit OTA / Simjacker detection (S@T, WIB) on inbound | ✅ | Read-only detection for honeypot numbers; decodes the attack and alerts. See [docs/HONEYPOT.md](docs/HONEYPOT.md). |
+| Attack classification (Simjacker, WIBattack, silent SMS, WAP provisioning, smishing) with a confidence score, stored with per-number statistics | ✅ | Pulled by a remote collector via `/api/v1/security/events` and `/api/v1/security/stats`; a Threats dashboard page. |
 
 ### Modems
 
