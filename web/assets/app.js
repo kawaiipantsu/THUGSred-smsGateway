@@ -4,6 +4,7 @@ import { app, h, s, fill, api, setToken, errorBox, button, dialog, field, toast,
 import { overview, inbox, outbox, history as historyPage, queue, openMessage } from './pages-main.js';
 import { send, contacts } from './pages-send.js';
 import { threats } from './pages-threats.js';
+import { tokens } from './pages-tokens.js';
 import { pdu, calls, integrations, modem, system, apidocs } from './pages-more.js';
 
 const ROUTES = {
@@ -19,6 +20,7 @@ const ROUTES = {
   calls: ['Calls', calls],
   integrations: ['Integrations', integrations],
   modem: ['Modem', modem],
+  tokens: ['API Tokens', tokens],
   system: ['System', system],
   docs: ['API Documentation', apidocs],
 };

@@ -1070,3 +1070,84 @@ impl Db {
         }))
     }
 }
+
+impl Db {
+    /// Look up a managed API token by the SHA-256 hash of the presented value.
+    /// Returns (id, scope) when it is enabled and not expired.
+    pub async fn api_token_lookup(&self, hash: &str) -> DbResult<Option<(String, String)>> {
+        let now = utils::now();
+        let row = self
+            .row(
+                "SELECT id, scope FROM api_tokens WHERE token_hash = ? AND enabled = 1 AND (expires_at IS NULL OR expires_at > ?)",
+                params![hash, &now],
+            )
+            .await?;
+        Ok(row.map(|r| {
+            (
+                get_s(&r, "id").unwrap_or_default(),
+                get_s(&r, "scope").unwrap_or_else(|| "read".into()),
+            )
+        }))
+    }
+
+    /// Record use of a token, at most once a minute to keep writes low.
+    pub async fn api_token_touch(&self, id: &str) -> DbResult<()> {
+        let now = utils::now();
+        let cutoff = utils::ts_after(-60);
+        self.exec(
+            "UPDATE api_tokens SET last_used_at = ? WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)",
+            params![&now, id, &cutoff],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Create a managed token. Returns (id, raw token shown once).
+    pub async fn create_api_token(
+        &self,
+        name: &str,
+        scope: &str,
+        expires_at: Option<&str>,
+    ) -> DbResult<(String, String)> {
+        let id = utils::new_id();
+        let raw = format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
+        );
+        let hash = utils::sha256_hex(raw.as_bytes());
+        let prefix: String = raw.chars().take(8).collect();
+        self.exec(
+            "INSERT INTO api_tokens (id, name, prefix, token_hash, scope, enabled, created_at, expires_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+            params![&id, name, &prefix, &hash, scope, utils::now(), expires_at],
+        )
+        .await?;
+        Ok((id, raw))
+    }
+
+    /// Managed tokens, newest first. The hash is never returned.
+    pub async fn list_api_tokens(&self) -> DbResult<Vec<Json>> {
+        self.json_rows(
+            "SELECT id, name, prefix, scope, enabled, created_at, last_used_at, expires_at FROM api_tokens ORDER BY created_at DESC",
+            vec![],
+        )
+        .await
+    }
+
+    pub async fn set_api_token_enabled(&self, id: &str, enabled: bool) -> DbResult<bool> {
+        Ok(self
+            .exec(
+                "UPDATE api_tokens SET enabled = ? WHERE id = ?",
+                params![enabled as i64, id],
+            )
+            .await?
+            == 1)
+    }
+
+    pub async fn delete_api_token(&self, id: &str) -> DbResult<bool> {
+        Ok(self
+            .exec("DELETE FROM api_tokens WHERE id = ?", params![id])
+            .await?
+            == 1)
+    }
+}

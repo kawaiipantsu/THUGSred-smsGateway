@@ -31,6 +31,8 @@ pub struct AppState {
 pub struct Ctx {
     pub request_id: String,
     pub client_ip: IpAddr,
+    /// The caller presented a valid admin-scoped token (config or managed).
+    pub admin: bool,
 }
 
 /// Uniform JSON error response.
@@ -215,6 +217,30 @@ fn token_ok(tokens: &[String], headers: &HeaderMap) -> bool {
     }
 }
 
+/// Resolve the presented bearer token to (authenticated, admin). Managed
+/// tokens (api_tokens table) are checked after the config tokens; a managed
+/// token is matched by the SHA-256 hash of the value and can be revoked
+/// instantly, without a reload.
+async fn resolve_auth(state: &AppState, cfg: &Config, headers: &HeaderMap) -> (bool, bool) {
+    let Some(tok) = bearer(headers) else {
+        return (false, false);
+    };
+    if token_ok(&cfg.api.admin_tokens, headers) {
+        return (true, true);
+    }
+    if token_ok(&cfg.api.tokens, headers) {
+        return (true, false);
+    }
+    let hash = utils::sha256_hex(tok.as_bytes());
+    match state.gw.db.api_token_lookup(&hash).await {
+        Ok(Some((id, scope))) => {
+            let _ = state.gw.db.api_token_touch(&id).await;
+            (true, scope == "admin")
+        }
+        _ => (false, false),
+    }
+}
+
 fn host_only(h: &str) -> &str {
     if let Some(end) = h.strip_prefix('[').and_then(|r| r.find(']')) {
         return &h[1..=end];
@@ -237,15 +263,18 @@ pub fn require_admin(state: &AppState, ctx: &Ctx, headers: &HeaderMap) -> Result
             "administrative endpoints are not available from this address",
         ));
     }
-    if !cfg.api.admin_tokens.iter().all(|t| t.is_empty())
-        && !token_ok(&cfg.api.admin_tokens, headers)
-    {
+    // An admin token is required when bearer auth is on, or when admin tokens
+    // are configured. A managed admin token satisfies it too (ctx.admin).
+    let token_required =
+        cfg.api.authentication == "bearer" || !cfg.api.admin_tokens.iter().all(|t| t.is_empty());
+    if token_required && !ctx.admin {
         return Err(ApiError::new(
             StatusCode::UNAUTHORIZED,
             "unauthorized",
             "an administrative bearer token is required",
         ));
     }
+    let _ = headers;
     Ok(())
 }
 
@@ -304,7 +333,13 @@ fn is_provider_callback(method: &Method, path: &str) -> bool {
 }
 
 /// Checks applied to every request before it reaches a handler.
-fn authorize(state: &AppState, cfg: &Config, ip: IpAddr, req: &Request) -> Result<(), ApiError> {
+fn authorize(
+    state: &AppState,
+    cfg: &Config,
+    ip: IpAddr,
+    req: &Request,
+    authenticated: bool,
+) -> Result<(), ApiError> {
     let headers = req.headers();
     let path = req.uri().path();
     if is_provider_callback(req.method(), path) {
@@ -351,18 +386,16 @@ fn authorize(state: &AppState, cfg: &Config, ip: IpAddr, req: &Request) -> Resul
         }
     }
     if cfg.api.authentication == "bearer"
+        && !authenticated
         && !is_public_asset(path)
         && !is_probe(path)
         && *req.method() != Method::OPTIONS
     {
-        let ok = token_ok(&cfg.api.tokens, headers) || token_ok(&cfg.api.admin_tokens, headers);
-        if !ok {
-            return Err(ApiError::new(
-                StatusCode::UNAUTHORIZED,
-                "unauthorized",
-                "a valid bearer token is required",
-            ));
-        }
+        return Err(ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "unauthorized",
+            "a valid bearer token is required",
+        ));
     }
     if cfg.api.rate_limit_per_minute > 0 && !is_probe(path) && !is_public_asset(path) {
         let mut map = state.limiter.lock().unwrap_or_else(|e| e.into_inner());
@@ -419,14 +452,16 @@ async fn guard(
         .and_then(|h| h.to_str().ok())
         .map(str::to_string);
     let is_asset = is_public_asset(req.uri().path());
+    let (authenticated, admin) = resolve_auth(&state, &cfg, req.headers()).await;
 
-    let mut resp = match authorize(&state, &cfg, ip, &req) {
+    let mut resp = match authorize(&state, &cfg, ip, &req, authenticated) {
         Err(e) => e.into_response(),
         Ok(()) if method == Method::OPTIONS => StatusCode::NO_CONTENT.into_response(),
         Ok(()) => {
             req.extensions_mut().insert(Ctx {
                 request_id: request_id.clone(),
                 client_ip: ip,
+                admin,
             });
             next.run(req).await
         }
@@ -567,6 +602,11 @@ pub fn router(gw: Arc<Gateway>) -> Router {
         .route("/history/export", get(h::export))
         .route("/ussd", get(h::ussd_history).post(h::ussd))
         .route("/gnss", get(h::gnss))
+        .route("/tokens", get(h::tokens).post(h::token_create))
+        .route(
+            "/tokens/{id}",
+            post(h::token_update).delete(h::token_delete),
+        )
         .route("/config", get(h::config_view))
         .route("/config/status", get(h::config_status))
         .route("/config/reload", post(h::config_reload))

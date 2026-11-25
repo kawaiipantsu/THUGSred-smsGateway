@@ -139,6 +139,15 @@ The client sends `Authorization: Bearer <token>`. Remember check 1: the client's
 must also be permitted by `api.allowed_cidrs` (and by any reverse-proxy allow rules), so a
 remote integration needs its source IP allowed in addition to a token.
 
+**Managed tokens (recommended).** Instead of editing the configuration, create tokens from
+the dashboard's **API Tokens** page or the `/api/v1/tokens` endpoints (admin only). A managed
+token has a name and a scope (`read` or `admin`), only its hash is stored, the raw value is
+shown once, and it can be revoked instantly with no reload. Use one per integration so you
+can revoke a single client without affecting the others. Managed tokens work alongside the
+config `tokens`/`admin_tokens`; keep at least one admin token (config or managed) so you can
+always reach the API Tokens page. Enabling bearer auth requires at least one token in
+`api.tokens` or `api.admin_tokens` to bootstrap.
+
 ### Administrative endpoints
 
 Endpoints marked **admin** below additionally require:
@@ -1053,6 +1062,10 @@ is true.
 
 | Method | Path | Admin | Purpose |
 | --- | --- | --- | --- |
+| GET | `/api/v1/tokens` | yes | List managed API tokens (value never returned) |
+| POST | `/api/v1/tokens` | yes | Create a managed token `{name, scope: read\|admin, expires_at?}`; the raw token is returned once |
+| POST | `/api/v1/tokens/{id}` | yes | Enable/disable a managed token `{enabled}` (immediate) |
+| DELETE | `/api/v1/tokens/{id}` | yes | Revoke a managed token (immediate) |
 | GET | `/api/v1/config` | yes | Effective configuration with secrets redacted |
 | GET | `/api/v1/config/status` | | Validation and reload status, configuration file paths |
 | POST | `/api/v1/config/reload` | yes | Reload the configuration from disk |

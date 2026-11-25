@@ -1062,6 +1062,113 @@ pub struct SecurityQ {
     offset: Option<i64>,
 }
 
+/// Managed API tokens. Admin only; the token value is never returned here.
+pub async fn tokens(State(s): S, Extension(ctx): C, headers: HeaderMap) -> ApiResult {
+    require_admin(&s, &ctx, &headers)?;
+    ok(json!({"tokens": s.gw.db.list_api_tokens().await?}))
+}
+
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+pub struct TokenCreate {
+    name: String,
+    #[serde(default)]
+    scope: String,
+    expires_at: Option<String>,
+}
+
+/// Create a managed token. The raw value is returned once and never again.
+pub async fn token_create(
+    State(s): S,
+    Extension(ctx): C,
+    headers: HeaderMap,
+    ApiJson(b): ApiJson<TokenCreate>,
+) -> Result<Response, ApiError> {
+    require_admin(&s, &ctx, &headers)?;
+    let name = b.name.trim();
+    if name.is_empty() || name.chars().count() > 100 || name.chars().any(char::is_control) {
+        return Err(ApiError::bad_request("name must be 1 to 100 characters"));
+    }
+    let scope = match b.scope.as_str() {
+        "" | "read" => "read",
+        "admin" => "admin",
+        _ => return Err(ApiError::bad_request("scope must be \"read\" or \"admin\"")),
+    };
+    let expires = parse_time("expires_at", &b.expires_at, false)?;
+    if let Some(e) = &expires {
+        if e.as_str() <= utils::now().as_str() {
+            return Err(ApiError::bad_request("expires_at must be in the future"));
+        }
+    }
+    let (id, raw) =
+        s.gw.db
+            .create_api_token(name, scope, expires.as_deref())
+            .await?;
+    audit(
+        &s,
+        &ctx,
+        "token.create",
+        Some(&id),
+        Some(&format!("scope={scope}")),
+    )
+    .await;
+    let body = json!({
+        "success": true,
+        "data": {
+            "id": id,
+            "name": name,
+            "scope": scope,
+            "token": raw,
+            "note": "Store this token now - it is not shown again.",
+        }
+    });
+    Ok((StatusCode::CREATED, Json(body)).into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TokenUpdate {
+    enabled: bool,
+}
+
+/// Enable or disable a managed token (takes effect immediately).
+pub async fn token_update(
+    State(s): S,
+    Extension(ctx): C,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    ApiJson(b): ApiJson<TokenUpdate>,
+) -> ApiResult {
+    require_admin(&s, &ctx, &headers)?;
+    if !s.gw.db.set_api_token_enabled(&id, b.enabled).await? {
+        return Err(ApiError::not_found("token not found"));
+    }
+    audit(
+        &s,
+        &ctx,
+        "token.update",
+        Some(&id),
+        Some(if b.enabled { "enabled" } else { "disabled" }),
+    )
+    .await;
+    ok(json!({"id": id, "enabled": b.enabled}))
+}
+
+/// Revoke (delete) a managed token (takes effect immediately).
+pub async fn token_delete(
+    State(s): S,
+    Extension(ctx): C,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> ApiResult {
+    require_admin(&s, &ctx, &headers)?;
+    if !s.gw.db.delete_api_token(&id).await? {
+        return Err(ApiError::not_found("token not found"));
+    }
+    audit(&s, &ctx, "token.delete", Some(&id), None).await;
+    ok(json!({"deleted": true}))
+}
+
 /// Detected inbound attacks (honeypot), newest first.
 pub async fn security_events(State(s): S, ApiQuery(q): ApiQuery<SecurityQ>) -> ApiResult {
     if let Some(c) = q.category.as_deref().filter(|c| !c.is_empty()) {

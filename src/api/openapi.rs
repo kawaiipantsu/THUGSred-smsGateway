@@ -501,6 +501,44 @@ fn ops() -> Vec<Op> {
             admin: true,
             ..op(
                 "get",
+                "/api/v1/tokens",
+                "API tokens",
+                "List managed API tokens (admin). The token value is never returned",
+            )
+        },
+        Op {
+            admin: true,
+            body: Some(r#"{"name": "honeypot-collector", "scope": "read"}"#),
+            ..op(
+                "post",
+                "/api/v1/tokens",
+                "API tokens",
+                "Create a managed token (admin). The raw token is returned once",
+            )
+        },
+        Op {
+            admin: true,
+            body: Some(r#"{"enabled": false}"#),
+            ..op(
+                "post",
+                "/api/v1/tokens/{id}",
+                "API tokens",
+                "Enable or disable a managed token (admin); effective immediately",
+            )
+        },
+        Op {
+            admin: true,
+            ..op(
+                "delete",
+                "/api/v1/tokens/{id}",
+                "API tokens",
+                "Revoke a managed token (admin); effective immediately",
+            )
+        },
+        Op {
+            admin: true,
+            ..op(
+                "get",
                 "/api/v1/config",
                 "Administration",
                 "Effective configuration with secrets redacted",

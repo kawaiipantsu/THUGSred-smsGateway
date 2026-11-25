@@ -1241,9 +1241,12 @@ fn validate(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) 
         &api.authentication,
         &["none", "bearer"],
     );
-    if api.authentication == "bearer" && api.tokens.iter().all(|t| t.is_empty()) {
+    if api.authentication == "bearer"
+        && api.tokens.iter().all(|t| t.is_empty())
+        && api.admin_tokens.iter().all(|t| t.is_empty())
+    {
         errors.push(
-            "api.tokens: at least one token is required when authentication is \"bearer\"".into(),
+            "api.tokens: at least one token in api.tokens or api.admin_tokens is required when authentication is \"bearer\" (managed tokens are created from the dashboard)".into(),
         );
     }
     for t in api.tokens.iter().chain(&api.admin_tokens) {

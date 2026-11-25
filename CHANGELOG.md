@@ -9,6 +9,12 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **Managed API tokens.** Create named bearer tokens (scope `read` or `admin`) from the
+  dashboard's API Tokens page or `/api/v1/tokens`, each revocable instantly with no reload.
+  Only a SHA-256 hash is stored (migration 0004); the raw value is shown once. Managed tokens
+  authenticate alongside the config `tokens`/`admin_tokens`, and `api.authentication = "bearer"`
+  now accepts a bootstrap token in either `tokens` or `admin_tokens`.
+
 - **Honeypot attack classification and statistics.** Inbound attacks are classified
   individually (`simjacker`, `wibattack`, `sim_ota`, `silent_sms`, `oma_cp`, `smishing`)
   with a heuristic confidence score (0-100) and stored in a `security_events` table

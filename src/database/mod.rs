@@ -221,6 +221,11 @@ const MIGRATIONS_SQLITE: &[(i64, &str, &str)] = &[
         "security_events",
         include_str!("../../migrations/sqlite/0003_security_events.sql"),
     ),
+    (
+        4,
+        "api_tokens",
+        include_str!("../../migrations/sqlite/0004_api_tokens.sql"),
+    ),
 ];
 const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[
     (
@@ -237,6 +242,11 @@ const MIGRATIONS_MYSQL: &[(i64, &str, &str)] = &[
         3,
         "security_events",
         include_str!("../../migrations/mysql/0003_security_events.sql"),
+    ),
+    (
+        4,
+        "api_tokens",
+        include_str!("../../migrations/mysql/0004_api_tokens.sql"),
     ),
 ];
 

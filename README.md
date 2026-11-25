@@ -96,6 +96,7 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 | Flash (class 0) and 8-bit binary SMS with application ports | ✅ | Not yet verified on real hardware |
 | Delivery reports correlated with sent messages | ✅ | Verified for one single-part message on a SIM868 over a real network |
 | Scheduled sending, priorities, expiry, cancel and retry | ✅ | |
+| Managed API tokens (create/scope/revoke per integration, instant) | ✅ | Dashboard **API Tokens** page and `/api/v1/tokens`; only a hash is stored. |
 | Contacts saved from the dashboard or API, next to `addressbook.conf` | ✅ | |
 | Sending through an SMS provider (GatewayAPI) with a sender name | 🧪 | Optional route; tested against a stand-in for the provider API, not against the real service. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | Idempotent submission (`Idempotency-Key`) | ✅ | |

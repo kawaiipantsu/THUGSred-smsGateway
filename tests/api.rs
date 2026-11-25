@@ -898,3 +898,101 @@ async fn contacts_and_page_paths() {
     assert!(v["data"]["recipient_name"].is_null());
     h.stop().await;
 }
+
+#[tokio::test]
+async fn managed_api_tokens_lifecycle() {
+    // Bearer auth on, with one configured admin token to bootstrap.
+    let h = start(Setup {
+        overrides: vec![
+            "api.authentication=bearer".into(),
+            "api.admin_tokens=[\"bootstrap-admin-token-0123456789\"]".into(),
+        ],
+        ..Default::default()
+    })
+    .await;
+    h.ready().await;
+    let base = serve(&h).await;
+    let client = reqwest::Client::new();
+    let authed = |tok: &str, path: String| {
+        let c = client.clone();
+        let url = format!("{base}{path}");
+        let tok = tok.to_string();
+        async move {
+            let r = c
+                .get(url)
+                .header("authorization", format!("Bearer {tok}"))
+                .send()
+                .await
+                .unwrap();
+            r.status().as_u16()
+        }
+    };
+
+    // No token: rejected. Managing tokens needs the admin token.
+    assert_eq!(
+        reqwest::get(format!("{base}/api/v1/status"))
+            .await
+            .unwrap()
+            .status()
+            .as_u16(),
+        401
+    );
+    let r = client
+        .post(format!("{base}/api/v1/tokens"))
+        .header("authorization", "Bearer bootstrap-admin-token-0123456789")
+        .json(&json!({"name": "honeypot", "scope": "read"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 201);
+    let created: Value = r.json().await.unwrap();
+    let raw = created["data"]["token"].as_str().unwrap().to_string();
+    let id = created["data"]["id"].as_str().unwrap().to_string();
+    assert_eq!(raw.len(), 64);
+
+    // The raw token is never listed, only a prefix.
+    let r = client
+        .get(format!("{base}/api/v1/tokens"))
+        .header("authorization", "Bearer bootstrap-admin-token-0123456789")
+        .send()
+        .await
+        .unwrap();
+    let list: Value = r.json().await.unwrap();
+    let body = list.to_string();
+    assert!(!body.contains(&raw));
+    assert_eq!(list["data"]["tokens"][0]["scope"], "read");
+
+    // The managed read token authenticates ordinary endpoints...
+    assert_eq!(authed(&raw, "/api/v1/status".into()).await, 200);
+    assert_eq!(authed(&raw, "/api/v1/security/events".into()).await, 200);
+    // ...but cannot reach admin endpoints or manage tokens.
+    assert_eq!(authed(&raw, "/api/v1/tokens".into()).await, 401);
+
+    // Disable: effective immediately, no reload.
+    let r = client
+        .post(format!("{base}/api/v1/tokens/{id}"))
+        .header("authorization", "Bearer bootstrap-admin-token-0123456789")
+        .json(&json!({"enabled": false}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 200);
+    assert_eq!(authed(&raw, "/api/v1/status".into()).await, 401);
+
+    // Revoke.
+    let r = client
+        .delete(format!("{base}/api/v1/tokens/{id}"))
+        .header("authorization", "Bearer bootstrap-admin-token-0123456789")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 200);
+    let r = client
+        .delete(format!("{base}/api/v1/tokens/{id}"))
+        .header("authorization", "Bearer bootstrap-admin-token-0123456789")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status().as_u16(), 404);
+    h.stop().await;
+}

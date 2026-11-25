@@ -53,6 +53,7 @@ pub const PAGES: &[&str] = &[
     "calls",
     "integrations",
     "modem",
+    "tokens",
     "system",
     "docs",
 ];
