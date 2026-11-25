@@ -431,6 +431,7 @@ pub fn load(opts: &LoadOptions) -> Result<Config, ConfigError> {
         integrations: cfg.integrations.config_file.clone(),
         addressbook: cfg.paths.addressbook.clone(),
         anonymous: cfg.paths.anonymous.clone(),
+        providers: cfg.paths.providers.clone(),
     };
     if sim_path.exists() {
         check_permissions(&sim_path, &mut warnings);
@@ -468,6 +469,41 @@ pub fn load(opts: &LoadOptions) -> Result<Config, ConfigError> {
             "integrations configuration {} not found; no integrations loaded",
             int_path.display()
         ));
+    }
+
+    // Upstream SMS providers (optional).
+    let prov_path = PathBuf::from(&cfg.paths.providers);
+    if prov_path.exists() {
+        check_permissions(&prov_path, &mut warnings);
+        match read_toml(&prov_path) {
+            Ok(mut v) => {
+                resolve_secrets(&mut v, "providers.conf", false, &env_file, &mut errors);
+                let file = cfg.paths.providers.clone();
+                if let Some(t) = v.as_table() {
+                    for k in t.keys().filter(|k| k.as_str() != "provider") {
+                        warnings.push(format!("{file}: unknown section `{k}` ignored"));
+                    }
+                }
+                match v.get("provider") {
+                    None => {}
+                    Some(Value::Array(list)) => {
+                        for (i, entry) in list.iter().enumerate() {
+                            cfg.providers.push(from_value(
+                                entry,
+                                &format!("{file}: provider[{i}]"),
+                                &format!("provider[{i}]"),
+                                &mut errors,
+                                &mut warnings,
+                            ));
+                        }
+                    }
+                    Some(_) => errors.push(format!(
+                        "{file}: provider must be an array of tables ([[provider]])"
+                    )),
+                }
+            }
+            Err(e) => errors.push(e),
+        }
     }
 
     // Address book and always-anonymous list (both optional).
@@ -746,7 +782,106 @@ pub fn valid_number(n: &str) -> bool {
     !d.is_empty() && d.len() <= 20 && d.chars().all(|c| c.is_ascii_digit())
 }
 
+/// Check a provider sender: 3 to 11 letters, digits or spaces containing at
+/// least one letter, or a number of 3 to 15 digits.
+pub fn valid_sender_name(sender: &str) -> Result<(), String> {
+    let n = sender.chars().count();
+    if sender.chars().all(|c| c.is_ascii_digit()) {
+        return if (3..=15).contains(&n) {
+            Ok(())
+        } else {
+            Err("a numeric sender must have 3 to 15 digits".into())
+        };
+    }
+    if !sender
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == ' ')
+    {
+        return Err("a sender name may only contain the letters a-z, digits and spaces".into());
+    }
+    if !(3..=11).contains(&n) || sender.trim() != sender {
+        return Err(
+            "a sender name must be 3 to 11 characters without leading or trailing spaces".into(),
+        );
+    }
+    Ok(())
+}
+
+fn validate_providers(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
+    let mut names = HashSet::new();
+    for p in &cfg.providers {
+        let f = format!("provider[{}]", p.name);
+        if p.name.is_empty()
+            || !p
+                .name
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_".contains(c))
+        {
+            errors.push(format!(
+                "{f}.name: must be non-empty and contain only letters, digits, '-' or '_'"
+            ));
+        }
+        if !names.insert(p.name.clone()) {
+            errors.push(format!("{f}.name: duplicate provider name"));
+        }
+        one_of(errors, &format!("{f}.type"), &p.kind, &["gatewayapi"]);
+        one_of(errors, &format!("{f}.region"), &p.region, &["com", "eu"]);
+        one_of(
+            errors,
+            &format!("{f}.priority"),
+            &p.priority,
+            &["normal", "urgent"],
+        );
+        positive(errors, &format!("{f}.timeout_seconds"), p.timeout_seconds);
+        if !p.base_url.is_empty() && !valid_http_url(&p.base_url) {
+            errors.push(format!("{f}.base_url: must be an http(s) URL"));
+        }
+        if p.label.chars().count() > 128 {
+            errors.push(format!("{f}.label: is limited to 128 characters"));
+        }
+        if !p.default_sender.is_empty() {
+            if let Err(e) = valid_sender_name(&p.default_sender) {
+                errors.push(format!("{f}.default_sender: {e}"));
+            }
+        }
+        for a in p.allowed_senders.iter().filter(|a| a.as_str() != "*") {
+            if let Err(e) = valid_sender_name(a) {
+                errors.push(format!("{f}.allowed_senders: {a:?}: {e}"));
+            }
+        }
+        if !p.enabled {
+            continue;
+        }
+        if p.api_token.is_empty() {
+            errors.push(format!(
+                "{f}.api_token: is required for an enabled provider"
+            ));
+        }
+        if p.default_sender.is_empty() && p.allowed_senders.is_empty() {
+            errors.push(format!(
+                "{f}: set default_sender or allowed_senders; without them nothing can be sent"
+            ));
+        }
+        if p.allowed_senders.iter().any(|a| a == "*") {
+            warnings.push(format!(
+                "{f}.allowed_senders: \"*\" lets every API caller choose any sender name"
+            ));
+        }
+        if p.callback_secret.is_empty() {
+            warnings.push(format!(
+                "{f}.callback_secret: not set; delivery status callbacks from the provider are rejected and messages stay `submitted`"
+            ));
+        }
+        if p.daily_sms_limit == 0 && p.monthly_sms_limit == 0 {
+            warnings.push(format!(
+                "{f}: no daily_sms_limit or monthly_sms_limit; provider spending is unlimited"
+            ));
+        }
+    }
+}
+
 fn validate(cfg: &Config, errors: &mut Vec<String>, warnings: &mut Vec<String>) {
+    validate_providers(cfg, errors, warnings);
     let g = &cfg.general;
     if g.instance_id.is_empty()
         || !g
@@ -1295,6 +1430,8 @@ const SECRET_KEYS: &[&str] = &[
     "signing_secret",
     "bot_token",
     "token",
+    "api_token",
+    "callback_secret",
     "webhook_url",
     "chat_id",
 ];

@@ -112,6 +112,9 @@ Details:
   `/health`, `/ready`, `/api/v1/ui/config` and `OPTIONS` requests. `/api/v1/ui/config` holds
   no secrets; the dashboard needs it to render its login prompt. These paths are still
   subject to checks 1 and 2.
+- **Provider callbacks.** `POST /api/v1/providers/{name}/callback` skips checks 1 to 5. It
+  is authenticated by the provider's signature instead; see
+  [PROVIDERS.md](PROVIDERS.md#delivery-status-callbacks).
 - **Rate limit.** Counted per client address in one-minute windows. `/health`, `/ready`, the
   dashboard assets and `/api/v1/ui/config` are not counted.
 - **Metrics.** `/metrics` is treated like any API path: it needs a token when bearer
@@ -469,6 +472,8 @@ The PIN and the APN password are never returned.
 | `scheduled_at` | string | | RFC 3339 time, at most one year ahead. A time in the past sends immediately. |
 | `modem` | string | | Send through this modem |
 | `from` | string | | Send through the modem whose SIM profile has this `mobile_number`. Selects one of the gateway's own SIMs; it cannot set an arbitrary sender. |
+| `provider` | string | | Send through this SMS provider instead of a modem ([PROVIDERS.md](PROVIDERS.md)). Text only; cannot be combined with `modem` or `from`. |
+| `sender_name` | string | provider's `default_sender` | Sender shown to the recipient. Needs a provider (the first enabled one when `provider` is absent) and must be allowed by its configuration, else `403`. Not related to the address-book field `sender_name` of message objects. |
 | `destination_port`, `source_port` | integer | | Application ports (0 to 65535) |
 | `protocol_identifier` | integer | `0` | A non-zero value needs `security.allow_raw_pdu_submission` |
 | `correlation_id` | string | request id | At most 128 characters; copied to events |
@@ -825,6 +830,15 @@ lies inside `paths.recordings` or `paths.attachments` respectively (`403` otherw
 when the file is gone), and each download is written to the audit trail. Attachment ids are
 listed in the `attachments` array of `GET /api/v1/messages/{id}`
 (`id`, `filename`, `content_type`, `size_bytes`, `sha256`, `created_at`).
+
+## SMS providers
+
+| Method | Path | Admin | Purpose |
+| --- | --- | --- | --- |
+| GET | `/api/v1/providers` | | Providers with route id, default and allowed senders, limits and segments used today and this month. Never includes the token or callback secret. |
+| POST | `/api/v1/providers/{name}/callback` | | Delivery status webhook for the provider's servers. `200` with `data.result` (`applied`, `noted`, `ignored`, `duplicate`, `already_final`, `unknown_message`), `401 invalid_signature`, `404` when the provider has no `callback_secret`, `503` when the report should be repeated. |
+
+The send response contains `provider` (name or `null`) and `sender`.
 
 ## Integrations and deliveries
 

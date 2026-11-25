@@ -28,6 +28,11 @@ pub struct SendRequest {
     /// Send through the modem whose SIM has this gateway number. This selects
     /// a physical SIM; it cannot change the number the network presents.
     pub from: Option<String>,
+    /// Send through this SMS provider instead of a modem.
+    pub provider: Option<String>,
+    /// Sender shown to the recipient. Only an SMS provider can set one, and
+    /// only to a sender the provider's configuration allows.
+    pub sender_name: Option<String>,
     pub destination_port: Option<u16>,
     pub source_port: Option<u16>,
     pub protocol_identifier: Option<u8>,
@@ -145,6 +150,261 @@ impl SmsService {
             )));
         }
         Ok(None)
+    }
+
+    /// Resolve the SMS provider and sender for a request that asks for one.
+    fn select_provider<'a>(
+        cfg: &'a Config,
+        req: &SendRequest,
+    ) -> Result<Option<(&'a crate::config::ProviderDef, String)>, SubmitError> {
+        let wanted = req.provider.as_deref().filter(|p| !p.is_empty());
+        let sender = req.sender_name.as_deref().filter(|s| !s.is_empty());
+        if wanted.is_none() && sender.is_none() {
+            return Ok(None);
+        }
+        let has = |v: &Option<String>| v.as_deref().map(|m| !m.is_empty()).unwrap_or(false);
+        if has(&req.modem) || has(&req.from) {
+            return Err(SubmitError::Invalid(
+                "`modem` and `from` select a SIM and cannot be combined with `provider` or `sender_name`".into(),
+            ));
+        }
+        let def = match wanted {
+            Some(name) => cfg.provider(name).ok_or_else(|| {
+                SubmitError::Invalid(format!("unknown or disabled SMS provider {name:?}"))
+            })?,
+            None => cfg.providers.iter().find(|p| p.enabled).ok_or_else(|| {
+                SubmitError::Invalid(
+                    "`sender_name` needs an SMS provider and none is configured; a SIM always sends with its own number".into(),
+                )
+            })?,
+        };
+        let sender = match sender {
+            Some(s) => s.to_string(),
+            None if !def.default_sender.is_empty() => def.default_sender.clone(),
+            None => {
+                return Err(SubmitError::Invalid(format!(
+                    "provider {:?} has no default_sender; `sender_name` is required",
+                    def.name
+                )))
+            }
+        };
+        crate::config::valid_sender_name(&sender).map_err(SubmitError::Invalid)?;
+        let allowed = sender == def.default_sender
+            || def.allowed_senders.iter().any(|a| a == "*" || *a == sender);
+        if !allowed {
+            return Err(SubmitError::Forbidden(format!(
+                "sender {sender:?} is not allowed for provider {:?} (default_sender / allowed_senders)",
+                def.name
+            )));
+        }
+        Ok(Some((def, sender)))
+    }
+
+    /// Queue a text message for an SMS provider route.
+    async fn submit_provider(
+        &self,
+        cfg: &Config,
+        req: &SendRequest,
+        to: &str,
+        def: &crate::config::ProviderDef,
+        sender: String,
+    ) -> Result<Submitted, SubmitError> {
+        let unsupported = |what: &str| {
+            Err(SubmitError::Invalid(format!(
+                "{what} is not available through an SMS provider; send it through a modem"
+            )))
+        };
+        if req.binary.is_some() {
+            return unsupported("binary SMS");
+        }
+        if req.flash || req.message_class.is_some() {
+            return unsupported("a message class (flash SMS)");
+        }
+        if req.destination_port.is_some() || req.source_port.is_some() {
+            return unsupported("an application port");
+        }
+        if req.protocol_identifier.unwrap_or(0) != 0 {
+            return unsupported("a protocol identifier");
+        }
+        if !matches!(req.encoding, Encoding::Auto) {
+            return unsupported("a forced encoding");
+        }
+        if !to.starts_with('+') {
+            return Err(SubmitError::Invalid(
+                "an SMS provider needs the destination in international format (+<country code>...)".into(),
+            ));
+        }
+        // The provider encodes and splits the text itself; the estimate is
+        // used for limits and quota accounting.
+        let enc_req = Self::encoder_request(cfg, req, to)?;
+        let est = pdu::estimate(
+            &enc_req.payload,
+            Encoding::Auto,
+            cfg.sms.allow_unicode,
+            false,
+        )
+        .map_err(|e| SubmitError::Invalid(e.to_string()))?;
+        if est.parts > enc_req.max_parts {
+            return Err(SubmitError::Invalid(format!(
+                "message needs {} parts; the limit is {}",
+                est.parts, enc_req.max_parts
+            )));
+        }
+        if enc_req
+            .validity_minutes
+            .map(|v| v > 5 * 1440)
+            .unwrap_or(false)
+        {
+            return Err(SubmitError::Invalid(
+                "validity_minutes is limited to 7200 (5 days) for an SMS provider".into(),
+            ));
+        }
+        if self.db.queue_depth().await? as u64 >= cfg.security.max_outbound_queue_size {
+            return Err(SubmitError::LimitReached(
+                "outbound queue is full (security.max_outbound_queue_size)".into(),
+            ));
+        }
+        let route = crate::providers::route_id(&def.name);
+        if let Some(reason) = self
+            .provider_quota_exhausted(cfg, def, est.parts as i64)
+            .await?
+        {
+            return Err(SubmitError::LimitReached(reason));
+        }
+        let now = utils::now();
+        let id = utils::new_id();
+        let scheduled = req.scheduled_at.filter(|t| *t > Utc::now());
+        let status = if scheduled.is_some() {
+            "scheduled"
+        } else {
+            "queued"
+        };
+        let encoding = est.encoding.as_str().to_string();
+        let message = Message {
+            id: id.clone(),
+            direction: "outbound".into(),
+            message_type: "sms".into(),
+            instance_id: cfg.general.instance_id.clone(),
+            modem_id: Some(route.clone()),
+            sender: Some(sender),
+            recipient: Some(to.to_string()),
+            original_address: Some(req.to.clone()),
+            normalized_number: Some(to.to_string()),
+            body: req.message.clone(),
+            encoding: Some(encoding.clone()),
+            concat_total: (est.parts > 1).then_some(est.parts as i64),
+            parts: est.parts as i64,
+            status: status.into(),
+            metadata: Some(serde_json::json!({
+                "origin": req.origin,
+                "validity_minutes": enc_req.validity_minutes,
+                "provider": def.name,
+                "provider_type": def.kind,
+            })),
+            correlation_id: req.correlation_id.clone(),
+            idempotency_key: req.idempotency_key.clone(),
+            delivery_report: !def.callback_secret.is_empty(),
+            created_at: now.clone(),
+            updated_at: now.clone(),
+            ..Default::default()
+        };
+        let parts: Vec<Part> = (1..=est.parts)
+            .map(|seq| Part {
+                id: utils::new_id(),
+                message_id: Some(id.clone()),
+                direction: "outbound".into(),
+                modem_id: Some(route.clone()),
+                address: Some(to.to_string()),
+                concat_total: Some(est.parts as i64),
+                sequence: seq as i64,
+                encoding: Some(encoding.clone()),
+                status: "queued".into(),
+                created_at: now.clone(),
+                ..Default::default()
+            })
+            .collect();
+        let expires = (cfg.sms.queue_expiry_seconds > 0).then(|| {
+            let base = scheduled.unwrap_or_else(Utc::now);
+            utils::ts(base + chrono::Duration::seconds(cfg.sms.queue_expiry_seconds as i64))
+        });
+        let queue = QueueItem {
+            message_id: id,
+            status: status.into(),
+            priority: req.priority.clamp(-100, 100),
+            modem_id: Some(route),
+            not_before: scheduled.map(utils::ts),
+            expires_at: expires,
+            created_at: now.clone(),
+            updated_at: now,
+            ..Default::default()
+        };
+        self.finish_submit(cfg, req, message, parts, queue).await
+    }
+
+    /// Returns a reason when `segments` more would exceed a provider limit.
+    pub(crate) async fn provider_quota_exhausted(
+        &self,
+        cfg: &Config,
+        def: &crate::config::ProviderDef,
+        segments: i64,
+    ) -> Result<Option<String>, crate::database::DbError> {
+        let route = crate::providers::route_id(&def.name);
+        let (day, month) = quota_windows(cfg, Utc::now());
+        for (limit, since, what) in [
+            (def.daily_sms_limit, day, "daily"),
+            (def.monthly_sms_limit, month, "monthly"),
+        ] {
+            if limit == 0 {
+                continue;
+            }
+            let used = self
+                .db
+                .segments_submitted_since(&route, &utils::ts(since))
+                .await?;
+            if (used + segments) as u64 > limit {
+                return Ok(Some(format!(
+                    "{what} SMS limit of {limit} reached for provider {:?}",
+                    def.name
+                )));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Persist a prepared message and announce it.
+    async fn finish_submit(
+        &self,
+        cfg: &Config,
+        req: &SendRequest,
+        message: Message,
+        parts: Vec<Part>,
+        queue: QueueItem,
+    ) -> Result<Submitted, SubmitError> {
+        match self.db.enqueue(&message, &parts, &queue).await {
+            Ok(()) => {}
+            Err(e) if e.is_unique_violation() => {
+                // A concurrent request with the same idempotency key won.
+                if let Some(key) = req.idempotency_key.as_deref() {
+                    if let Some(existing) = self.db.find_by_idempotency_key(key).await? {
+                        return Ok(Submitted {
+                            message: existing,
+                            duplicate: true,
+                        });
+                    }
+                }
+                return Err(e.into());
+            }
+            Err(e) => return Err(e.into()),
+        }
+        self.log_message("queued", &message, cfg);
+        self.events
+            .emit("sms.queued", Some(&message.id), message_data(&message))
+            .await;
+        self.wake.notify_waiters();
+        Ok(Submitted {
+            message,
+            duplicate: false,
+        })
     }
 
     /// Build the encoder request shared by estimation and submission.
@@ -306,6 +566,9 @@ impl SmsService {
                 ));
             }
         }
+        if let Some((def, sender)) = Self::select_provider(&cfg, &req)? {
+            return self.submit_provider(&cfg, &req, &to, def, sender).await;
+        }
         let modem_id = self.select_modem(&cfg, &req).await?;
         let enc_req = Self::encoder_request(&cfg, &req, &to)?;
         let encoded =
@@ -416,31 +679,7 @@ impl SmsService {
             updated_at: now,
             ..Default::default()
         };
-        match self.db.enqueue(&message, &parts, &queue).await {
-            Ok(()) => {}
-            Err(e) if e.is_unique_violation() => {
-                // A concurrent request with the same idempotency key won.
-                if let Some(key) = req.idempotency_key.as_deref() {
-                    if let Some(existing) = self.db.find_by_idempotency_key(key).await? {
-                        return Ok(Submitted {
-                            message: existing,
-                            duplicate: true,
-                        });
-                    }
-                }
-                return Err(e.into());
-            }
-            Err(e) => return Err(e.into()),
-        }
-        self.log_message("queued", &message, &cfg);
-        self.events
-            .emit("sms.queued", Some(&id), message_data(&message))
-            .await;
-        self.wake.notify_waiters();
-        Ok(Submitted {
-            message,
-            duplicate: false,
-        })
+        self.finish_submit(&cfg, &req, message, parts, queue).await
     }
 
     /// Returns a reason when sending `segments` more would exceed a SIM limit.

@@ -114,6 +114,14 @@ Details:
   peer is listed in `api.trusted_proxies`. The right-most address that is not itself a
   trusted proxy is used. A forwarded header from any other peer is ignored, so a client
   cannot talk its way past `allowed_cidrs`. IPv4-mapped IPv6 addresses are compared as IPv4.
+- **Provider callbacks.** `POST /api/v1/providers/{name}/callback` is the one path exempt
+  from the network allowlist, Host check, bearer token and rate limit, because an SMS
+  provider's servers call it from changing addresses. It accepts a request only when its
+  `Signature` header is a valid HMAC-SHA256 of the body under the provider's
+  `callback_secret`, and answers `404` for providers without a secret. It can only move a
+  message of that provider from `submitted` to a final delivery state. The provider's API
+  token in `providers.conf` is redacted in every API and CLI view. See
+  [PROVIDERS.md](PROVIDERS.md#delivery-status-callbacks).
 - **Tokens** are sent as `Authorization: Bearer <token>` and compared in constant time.
   Tokens shorter than 16 characters are a configuration error. There is no token expiry or
   rotation mechanism; to rotate, change the configuration and reload (tokens apply on

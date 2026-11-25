@@ -96,6 +96,7 @@ Legend: ✅ implemented and covered by automated tests · 🧪 experimental ·
 | Flash (class 0) and 8-bit binary SMS with application ports | ✅ | Not yet verified on real hardware |
 | Delivery reports correlated with sent messages | ✅ | Verified for one single-part message on a SIM868 over a real network |
 | Scheduled sending, priorities, expiry, cancel and retry | ✅ | |
+| Sending through an SMS provider (GatewayAPI) with a sender name | 🧪 | Optional route; tested against a stand-in for the provider API, not against the real service. See [docs/PROVIDERS.md](docs/PROVIDERS.md). |
 | Idempotent submission (`Idempotency-Key`) | ✅ | |
 | Per-SIM daily/monthly quotas, rate limits, allow and block lists | ✅ | |
 | Deduplication of received PDUs | ✅ | |
@@ -315,6 +316,7 @@ examples show the defaults.
 | `integrations.conf` | Integrations, routing rules and automation rules | `0640` |
 | `addressbook.conf` | Names for known numbers | `0640` |
 | `anonymous.conf` | Numbers that are never disclosed to integrations or logs | `0640` |
+| `providers.conf` | Optional SMS providers (API token, sender names, limits) | `0640` |
 | `smsgateway.env` | Secrets referenced as `"${NAME}"`; loaded by systemd for the service and read directly by the command-line tool | `0600` |
 | `modem-profiles/*.toml` | Optional custom or overriding modem profiles | |
 
@@ -805,6 +807,7 @@ with `thugsred-smsgateway db migrate`. Rollback steps are in
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Every configuration field |
 | [docs/API.md](docs/API.md) | REST API reference |
 | [docs/PDU.md](docs/PDU.md) | PDU codec and tools |
+| [docs/PROVIDERS.md](docs/PROVIDERS.md) | Sending through an SMS provider, sender names, status callbacks |
 | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Integrations, events, templates, routing, anonymisation, automation |
 | [docs/DATABASE.md](docs/DATABASE.md) | Engines, schema, message states, retention |
 | [docs/SECURITY.md](docs/SECURITY.md) | Threat model and controls |

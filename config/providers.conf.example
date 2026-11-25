@@ -1,0 +1,52 @@
+# THUGSred-smsGateway - upstream SMS providers (optional)
+#
+# A provider is an extra outbound route next to the modems. Messages sent
+# through it travel over the internet to the provider, who bills them. In
+# return a provider can show a sender name instead of a SIM's number.
+#
+# A message uses a provider only when the request asks for it
+# ("provider" and/or "sender_name"); everything else goes through a modem.
+#
+# This file holds an API token: keep it readable by root and the service
+# group only (chmod 640). Apply changes with:
+#   sudo systemctl reload thugsred-smsgateway
+#
+# Secrets may be written here directly or referenced as ${NAME} (taken from
+# the environment or /etc/thugsred/smsgateway.env) or ${file:/path}.
+#
+# See docs/PROVIDERS.md.
+
+# [[provider]]
+# name = "gatewayapi"
+# type = "gatewayapi"            # gatewayapi.com / gatewayapi.eu
+# enabled = true
+#
+# # API token from the provider dashboard.
+# api_token = "replace-with-your-api-token"
+# # Platform the account lives on: "com" (global) or "eu".
+# region = "com"
+#
+# # Sender used when a request does not name one: 3 to 11 letters, digits or
+# # spaces, or a number of 3 to 15 digits.
+# default_sender = "Example"
+# # Further senders callers may ask for. "*" accepts any well-formed sender.
+# # Only use senders you are entitled to; some countries require registration.
+# allowed_senders = []
+#
+# # "normal" or "urgent" (the provider may charge more for urgent).
+# priority = "normal"
+# # Optional label shown in the provider's own statistics.
+# label = ""
+# timeout_seconds = 15
+#
+# # Messages per minute handed to the provider (0 = unlimited).
+# rate_limit_per_minute = 60
+# # Spending protection in SMS segments (0 = unlimited).
+# daily_sms_limit = 100
+# monthly_sms_limit = 1000
+#
+# # Delivery states arrive as signed webhooks. Set the same secret here and in
+# # the provider dashboard, and point the provider's webhook at
+# #   https://<public name of this gateway>/api/v1/providers/gatewayapi/callback
+# # While this is empty, callbacks are rejected and messages stay "submitted".
+# callback_secret = ""

@@ -370,6 +370,7 @@ with the reason `gateway_shutdown`.
 | `src/modem/simulator.rs` | Software modem |
 | `src/sms/service.rs` | Submission rules, quotas, message log |
 | `src/sms/sender.rs` | Outbound queue worker |
+| `src/providers/` | SMS provider routes: queue worker, GatewayAPI client, signed status callbacks ([PROVIDERS.md](PROVIDERS.md)) |
 | `src/sms/inbound.rs` | Inbound processing |
 | `src/sms/automation.rs` | Reply and forward rules |
 | `src/sms/pdu/` | PDU codec (`types`, `gsm7`, `encode`, `decode`) |

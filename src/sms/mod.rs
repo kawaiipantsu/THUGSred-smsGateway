@@ -6,4 +6,4 @@ pub mod pdu;
 pub mod sender;
 mod service;
 
-pub use service::{SendRequest, SmsService, SubmitError, Submitted};
+pub use service::{quota_windows, SendRequest, SmsService, SubmitError, Submitted};

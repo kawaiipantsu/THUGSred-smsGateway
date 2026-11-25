@@ -429,6 +429,48 @@ impl Db {
         Ok(())
     }
 
+    /// Merge `values` into the metadata object of a message.
+    pub async fn merge_metadata(&self, id: &str, values: Json) -> DbResult<()> {
+        let Some(m) = self.get_message(id).await? else {
+            return Ok(());
+        };
+        let mut meta = match m.metadata {
+            Some(Json::Object(o)) => o,
+            _ => Default::default(),
+        };
+        if let Json::Object(v) = values {
+            meta.extend(v);
+        }
+        self.exec(
+            "UPDATE messages SET metadata = ? WHERE id = ?",
+            params![Json::Object(meta).to_string(), id],
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// Set the state of every part of a message (provider routes report
+    /// one status for the whole message).
+    pub async fn update_all_parts(
+        &self,
+        message_id: &str,
+        status: &str,
+        error: Option<&str>,
+    ) -> DbResult<()> {
+        let now = utils::now();
+        let (submitted, delivered) = match status {
+            "submitted" => (Some(now.clone()), None),
+            "delivered" => (None, Some(now)),
+            _ => (None, None),
+        };
+        self.exec(
+            "UPDATE message_parts SET status = ?, error = ?, submitted_at = COALESCE(?, submitted_at), delivered_at = COALESCE(?, delivered_at) WHERE message_id = ?",
+            params![status, error, submitted, delivered, message_id],
+        )
+        .await?;
+        Ok(())
+    }
+
     /// Set the modem that actually carries the parts of an outbound message.
     pub async fn assign_modem(
         &self,

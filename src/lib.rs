@@ -11,6 +11,7 @@ pub mod logging;
 pub mod metrics;
 pub mod mms;
 pub mod modem;
+pub mod providers;
 pub mod routing;
 pub mod sms;
 pub mod templates;

@@ -290,10 +290,24 @@ fn is_probe(path: &str) -> bool {
     path == "/health" || path == "/ready"
 }
 
+/// Status webhooks of SMS providers come from the provider's own servers.
+/// Their handler authenticates them by signature.
+fn is_provider_callback(method: &Method, path: &str) -> bool {
+    *method == Method::POST
+        && path
+            .strip_prefix("/api/v1/providers/")
+            .and_then(|rest| rest.strip_suffix("/callback"))
+            .map(|name| !name.is_empty() && !name.contains('/'))
+            .unwrap_or(false)
+}
+
 /// Checks applied to every request before it reaches a handler.
 fn authorize(state: &AppState, cfg: &Config, ip: IpAddr, req: &Request) -> Result<(), ApiError> {
     let headers = req.headers();
     let path = req.uri().path();
+    if is_provider_callback(req.method(), path) {
+        return Ok(());
+    }
     if !ip_in(&cfg.api.allowed_cidrs, ip) {
         return Err(ApiError::forbidden(
             "access from this address is not allowed (api.allowed_cidrs)",
@@ -535,6 +549,8 @@ pub fn router(gw: Arc<Gateway>) -> Router {
         .route("/recordings", get(h::recordings))
         .route("/recordings/{id}/download", get(h::recording_download))
         .route("/attachments/{id}/download", get(h::attachment_download))
+        .route("/providers", get(h::providers))
+        .route("/providers/{name}/callback", post(h::provider_callback))
         .route("/integrations", get(h::integrations))
         .route("/integrations/{name}/status", get(h::integration_status))
         .route("/integrations/{name}/test", post(h::integration_test))

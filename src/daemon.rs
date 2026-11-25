@@ -141,6 +141,9 @@ impl Gateway {
             ));
             modems.push(modem);
         }
+        tasks.push(tokio::spawn(
+            crate::providers::ProviderWorker::new(sms.clone()).run(shutdown_rx.clone()),
+        ));
         let calls = CallManager::new(
             shared.clone(),
             db.clone(),

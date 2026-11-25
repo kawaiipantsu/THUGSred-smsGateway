@@ -33,6 +33,8 @@ modem_profiles = "/etc/thugsred/modem-profiles"
 sim_config = "/etc/thugsred/sim.conf"
 addressbook = "/etc/thugsred/addressbook.conf"
 anonymous = "/etc/thugsred/anonymous.conf"
+# Upstream SMS providers (optional file; see providers.conf.example).
+providers = "/etc/thugsred/providers.conf"
 
 # Settings for the modem. With several modems this table holds the defaults
 # and each [[modems]] entry (see the end of this file) overrides them.

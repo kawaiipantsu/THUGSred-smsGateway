@@ -338,6 +338,21 @@ pub async fn run(cli: &Cli) -> Result<()> {
             ),
         }
 
+        for p in cfg.providers.iter().filter(|p| p.enabled) {
+            let check = format!("provider {}", p.name);
+            if p.callback_secret.is_empty() {
+                r.warn(check, format!("{} route configured, sender {:?}; no callback_secret", p.kind, p.default_sender), "Messages sent through this provider stay `submitted`. Set callback_secret and register the callback URL with the provider to receive delivery states (docs/PROVIDERS.md).");
+            } else {
+                r.ok(
+                    check,
+                    format!(
+                        "{} route configured, sender {:?}, delivery callbacks enabled",
+                        p.kind, p.default_sender
+                    ),
+                );
+            }
+        }
+
         for m in cfg.modems.iter().filter(|m| m.enabled) {
             let present = check_device(&mut r, &m.id, &m.device);
             match &status {

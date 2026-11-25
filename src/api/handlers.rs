@@ -508,6 +508,8 @@ pub struct SendBody {
     scheduled_at: Option<String>,
     modem: Option<String>,
     from: Option<String>,
+    provider: Option<String>,
+    sender_name: Option<String>,
     destination_port: Option<u16>,
     source_port: Option<u16>,
     protocol_identifier: Option<u8>,
@@ -576,6 +578,8 @@ fn to_request(b: SendBody, origin: &str) -> Result<SendRequest, ApiError> {
         scheduled_at,
         modem: b.modem,
         from: b.from,
+        provider: b.provider,
+        sender_name: b.sender_name,
         destination_port: b.destination_port,
         source_port: b.source_port,
         protocol_identifier: b.protocol_identifier,
@@ -638,6 +642,8 @@ async fn do_send(
         "parts": m.parts,
         "duplicate": done.duplicate,
         "modem": m.modem_id,
+        "provider": m.modem_id.as_deref().and_then(crate::providers::provider_of),
+        "sender": m.sender,
     });
     Ok((StatusCode::ACCEPTED, Json(body)).into_response())
 }
@@ -1243,6 +1249,67 @@ pub async fn integrations(State(s): S) -> ApiResult {
     ok(
         json!({"enabled": cfg.integrations.enabled, "integrations": out, "routing_rules": cfg.routing.iter().map(|r| json!({"name": r.name, "enabled": r.enabled, "events": r.events, "destinations": r.destinations, "stop_processing": r.stop_processing})).collect::<Vec<_>>(), "automation_rules": cfg.automation.iter().map(|r| json!({"name": r.name, "enabled": r.enabled, "action": r.action})).collect::<Vec<_>>()}),
     )
+}
+
+/// Configured SMS providers and their usage. Secrets are never included.
+pub async fn providers(State(s): S) -> ApiResult {
+    let cfg = s.gw.cfg.load_full();
+    let (day, month) = crate::sms::quota_windows(&cfg, Utc::now());
+    let mut out = Vec::new();
+    for p in &cfg.providers {
+        let route = crate::providers::route_id(&p.name);
+        let db = &s.gw.db;
+        out.push(json!({
+            "name": p.name,
+            "type": p.kind,
+            "enabled": p.enabled,
+            "route": route,
+            "default_sender": p.default_sender,
+            "allowed_senders": p.allowed_senders,
+            "any_sender_allowed": p.allowed_senders.iter().any(|a| a == "*"),
+            "delivery_callbacks": !p.callback_secret.is_empty(),
+            "callback_path": format!("/api/v1/providers/{}/callback", p.name),
+            "daily_sms_limit": p.daily_sms_limit,
+            "monthly_sms_limit": p.monthly_sms_limit,
+            "segments_today": db.segments_submitted_since(&route, &utils::ts(day)).await?,
+            "segments_this_month": db.segments_submitted_since(&route, &utils::ts(month)).await?,
+        }));
+    }
+    ok(json!({"providers": out}))
+}
+
+/// Delivery status webhook of an SMS provider. The request is authenticated
+/// by its signature alone, so it is exempt from the address and token checks.
+pub async fn provider_callback(
+    State(s): S,
+    Path(name): Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> ApiResult {
+    use crate::providers::CallbackError as E;
+    let signature = headers.get("signature").and_then(|h| h.to_str().ok());
+    match crate::providers::handle_callback(&s.gw.sms, &name, signature, &body).await {
+        Ok(result) => {
+            tracing::debug!(provider = %name, result, "provider callback");
+            ok(json!({"result": result}))
+        }
+        Err(E::Disabled) => Err(ApiError::not_found(
+            "no such provider, or it has no callback_secret",
+        )),
+        Err(E::BadSignature) => {
+            tracing::warn!(provider = %name, "provider callback rejected: missing or invalid signature");
+            Err(ApiError::new(
+                StatusCode::UNAUTHORIZED,
+                "invalid_signature",
+                "the Signature header is missing or does not match",
+            ))
+        }
+        Err(E::Invalid(m)) => Err(ApiError::bad_request(m)),
+        Err(E::NotYet) => Err(ApiError::unavailable(
+            "the message is still being submitted; repeat the notification later",
+        )),
+        Err(E::Database(e)) => Err(e.into()),
+    }
 }
 
 pub async fn integration_status(State(s): S, Path(name): Path<String>) -> ApiResult {

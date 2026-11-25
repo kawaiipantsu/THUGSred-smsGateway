@@ -33,6 +33,7 @@ The **Applies** column in the tables below uses:
 | 3 | Integrations | `/etc/thugsred/integrations.conf` | `integrations.config_file` | Warning; no integrations |
 | 4 | Address book | `/etc/thugsred/addressbook.conf` | `paths.addressbook` | Silently skipped |
 | 5 | Anonymous list | `/etc/thugsred/anonymous.conf` | `paths.anonymous` | Silently skipped |
+| 6 | SMS providers | `/etc/thugsred/providers.conf` | `paths.providers` | Silently skipped; no providers |
 
 Processing steps:
 
@@ -275,6 +276,7 @@ and `backups` must be absolute paths.
 | `sim_config` | string | `"/etc/thugsred/sim.conf"` | SIM configuration file |
 | `addressbook` | string | `"/etc/thugsred/addressbook.conf"` | Address book file |
 | `anonymous` | string | `"/etc/thugsred/anonymous.conf"` | Always-anonymous list |
+| `providers` | string | `"/etc/thugsred/providers.conf"` | SMS provider file |
 
 The daemon creates `data`, `runtime`, `recordings`, `attachments` and `backups` at start when
 it is allowed to. If you move directories, extend the unit's `ReadWritePaths`
@@ -716,6 +718,13 @@ Optional. Applies on reload. Install with mode `0640`.
 Exact entries also bridge national and international notation by the last eight digits,
 like the address book; two international numbers must be identical. See
 [INTEGRATIONS.md](INTEGRATIONS.md#anonymisation) for what is and is not hidden.
+
+## providers.conf
+
+Optional. Applies on reload. Install with mode `0640`; it holds an API token. Each
+`[[provider]]` entry is an outbound route through an SMS provider's API, used by requests
+that name `provider` or `sender_name`. Fields, callbacks and failure handling are described
+in [PROVIDERS.md](PROVIDERS.md#configuration).
 
 ## smsgateway.env
 

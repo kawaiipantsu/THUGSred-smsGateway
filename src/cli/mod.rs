@@ -148,6 +148,12 @@ pub struct SendArgs {
     /// Send through the SIM with this gateway number.
     #[arg(long)]
     pub from: Option<String>,
+    /// Send through this SMS provider (providers.conf) instead of a modem.
+    #[arg(long)]
+    pub provider: Option<String>,
+    /// Sender name shown to the recipient (SMS providers only).
+    #[arg(long, value_name = "NAME")]
+    pub sender_name: Option<String>,
     /// Schedule for an RFC 3339 time.
     #[arg(long, value_name = "TIME")]
     pub at: Option<String>,
@@ -714,10 +720,18 @@ async fn daemon_command(cli: &Cli) -> Result<()> {
         }
         Command::Sms { command } => match command {
             SmsCommand::Send(a) => {
-                let mut body = json!({"to": a.to, "message": a.message, "flash": a.flash, "delivery_report": !a.no_delivery_report});
+                let mut body = json!({"to": a.to, "message": a.message});
+                if a.provider.is_none() && a.sender_name.is_none() {
+                    body["flash"] = json!(a.flash);
+                    body["delivery_report"] = json!(!a.no_delivery_report);
+                } else if a.flash {
+                    body["flash"] = json!(true);
+                }
                 for (k, v) in [
                     ("modem", &a.modem),
                     ("from", &a.from),
+                    ("provider", &a.provider),
+                    ("sender_name", &a.sender_name),
                     ("scheduled_at", &a.at),
                 ] {
                     if let Some(v) = v {

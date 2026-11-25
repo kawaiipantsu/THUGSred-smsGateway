@@ -7,6 +7,16 @@ project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **SMS providers.** Optional outbound routes through an SMS provider's API, configured in
+  `providers.conf`. First provider type: `gatewayapi`. A request selects one with `provider`
+  or `sender_name`, which lets a message show an allowed sender name instead of a SIM
+  number. Includes sender allow-listing, per-provider rate limit and daily/monthly segment
+  limits, retry handling that never repeats an uncertain submission, signed delivery status
+  callbacks (`POST /api/v1/providers/{name}/callback`), `GET /api/v1/providers`, the CLI
+  options `--provider` and `--sender-name`, and a route choice on the dashboard's Send page.
+
 ## [0.1.0] - 2026-11-24
 
 Initial release.

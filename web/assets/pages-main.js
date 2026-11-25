@@ -271,7 +271,7 @@ export function overview(root) {
 const FINAL = ['delivered', 'failed', 'delivery_failed', 'cancelled', 'expired', 'submission_unknown', 'malformed'];
 
 export function send(root) {
-  let alive = true, sims = [], estSeq = 0, timer = null;
+  let alive = true, sims = [], providers = [], estSeq = 0, timer = null;
   const to = h('input', { type: 'tel', name: 'to', required: true, placeholder: '+4500000000', autocomplete: 'off', inputmode: 'tel' });
   const msg = h('textarea', { name: 'message', rows: 6, required: true, placeholder: 'Message text' });
   const est = h('div', { class: 'estimate', 'aria-live': 'polite' }, '0 characters');
@@ -282,12 +282,29 @@ export function send(root) {
   const modem = h('select', null);
   const modemField = field('Modem / SIM', modem, 'Automatic lets the gateway choose a ready modem.');
   modemField.hidden = true;
+  const route = h('select', null);
+  const routeField = field('Send via', route, 'A modem sends with its SIM number. A provider can show a sender name.');
+  routeField.hidden = true;
+  const sender = h('input', { type: 'text', name: 'sender_name', maxlength: 15, autocomplete: 'off', placeholder: 'Sender name' });
+  const senderField = field('Sender name', sender, '3 to 11 letters, digits or spaces. Only senders allowed in providers.conf are accepted.');
+  senderField.hidden = true;
+  const provider = () => providers.find((p) => p.name === route.value);
   const identity = h('div', { class: 'notice info' }, 'Loading gateway identity…');
   const result = h('div', null);
   const simOf = (id) => sims.find((x) => x.modem === id);
   const number = (x) => (x && x.configured && x.configured.mobile_number) || 'no number configured';
 
   function drawIdentity() {
+    const p = provider();
+    senderField.hidden = !p;
+    modemField.hidden = !!p || sims.length < 2;
+    flash.el.hidden = !!p;
+    if (p) {
+      flash.input.checked = false;
+      return fill(identity,
+        h('strong', null, 'Sending as: '), h('span', { class: 'mono' }, sender.value.trim() || p.default_sender || 'no sender set'), ` (provider ${p.name})`,
+        h('div', { class: 'muted small-text' }, `The message is handed to the provider over the internet and billed by the provider.${p.delivery_callbacks ? '' : ' Delivery status is not reported back because no callback secret is configured.'} Some countries replace or reject sender names.`));
+    }
     const chosen = modem.value ? [simOf(modem.value)].filter(Boolean) : sims;
     fill(identity,
       h('strong', null, 'Sending as: '),
@@ -313,6 +330,13 @@ export function send(root) {
   });
   flash.input.addEventListener('change', estimate);
   modem.addEventListener('change', drawIdentity);
+  route.addEventListener('change', () => {
+    const p = provider();
+    sender.value = p ? p.default_sender : '';
+    drawIdentity();
+    estimate();
+  });
+  sender.addEventListener('input', drawIdentity);
 
   function track(id) {
     const box = h('div', null, h('p', { class: 'muted' }, 'Waiting for status…'));
@@ -351,18 +375,25 @@ export function send(root) {
       if (isNaN(d)) return toast('The schedule time is not valid.', 'bad');
       body.scheduled_at = d.toISOString();
     }
-    if (modem.value) body.modem = modem.value;
+    const via = provider();
+    if (via) {
+      body.provider = via.name;
+      if (sender.value.trim()) body.sender_name = sender.value.trim();
+      if (!body.sender_name && !via.default_sender) return toast('Enter a sender name.', 'bad');
+      delete body.flash;
+      delete body.delivery_report;
+    } else if (modem.value) body.modem = modem.value;
     const ok = await confirmBox('Send this SMS?', [
       kv([
         ['To', h('span', { class: 'mono' }, body.to)],
-        ['Sending as', modem.value ? `${number(simOf(modem.value))} (${modem.value})` : sims.length === 1 ? `${number(sims[0])} (${sims[0].modem})` : 'chosen automatically by the gateway'],
+        ['Sending as', via ? `${body.sender_name || via.default_sender} (provider ${via.name})` : modem.value ? `${number(simOf(modem.value))} (${modem.value})` : sims.length === 1 ? `${number(sims[0])} (${sims[0].modem})` : 'chosen automatically by the gateway'],
         ['Priority', body.priority],
-        ['Delivery report', report.value ? (body.delivery_report ? 'requested' : 'not requested') : 'gateway default'],
+        ['Delivery report', via ? (via.delivery_callbacks ? 'reported by the provider' : 'not available (no callback secret)') : report.value ? (body.delivery_report ? 'requested' : 'not requested') : 'gateway default'],
         ['Flash', body.flash ? 'yes' : 'no'],
         ['Scheduled', body.scheduled_at ? fmtTime(body.scheduled_at) : 'send as soon as possible'],
       ]),
       h('pre', { class: 'body' }, body.message),
-      h('p', { class: 'muted' }, 'A real SMS will be transmitted through the modem.'),
+      h('p', { class: 'muted' }, via ? 'A real SMS will be sent through the provider and billed to the provider account.' : 'A real SMS will be transmitted through the modem.'),
     ], body.scheduled_at ? 'Schedule SMS' : 'Send SMS');
     if (!ok) return;
     const key = window.crypto && crypto.randomUUID ? crypto.randomUUID() : null;
@@ -379,7 +410,7 @@ export function send(root) {
     field('Destination number', to, 'International format, for example +4500000000.'),
     field('Message', msg),
     est,
-    h('div', { class: 'cols' }, field('Delivery report', report), field('Priority', prio), field('Schedule (optional)', when, 'Local time; leave empty to send now.'), modemField),
+    h('div', { class: 'cols' }, field('Delivery report', report), field('Priority', prio), field('Schedule (optional)', when, 'Local time; leave empty to send now.'), routeField, modemField, senderField),
     flash.el,
     h('div', { class: 'row' }, h('button', { type: 'submit', class: 'btn primary' }, 'Review and send')));
   root.append(form, result);
@@ -388,11 +419,19 @@ export function send(root) {
     if (!alive) return;
     sims = list || [];
     if (sims.length > 1) {
+      modemField.hidden = !!provider();
       fill(modem, h('option', { value: '' }, 'Automatic'), sims.map((x) => h('option', { value: x.modem }, `${x.modem} — ${number(x)}${x.ready ? '' : ' (SIM ' + x.state + ')'}`)));
-      modemField.hidden = false;
     }
     drawIdentity();
   }).catch((e) => alive && fill(identity, errorBox(e)));
+
+  get('/providers').then((d) => {
+    if (!alive) return;
+    providers = ((d && d.providers) || []).filter((p) => p.enabled);
+    if (!providers.length) return;
+    fill(route, h('option', { value: '' }, 'Modem (SIM number)'), providers.map((p) => h('option', { value: p.name }, `Provider ${p.name}${p.default_sender ? ' — ' + p.default_sender : ''}`)));
+    routeField.hidden = false;
+  }).catch(() => {});
 
   return { destroy: () => { alive = false; clearTimeout(timer); } };
 }

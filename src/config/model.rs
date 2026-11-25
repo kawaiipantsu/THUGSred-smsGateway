@@ -45,6 +45,8 @@ pub struct Paths {
     pub addressbook: String = s("/etc/thugsred/addressbook.conf"),
     /// Numbers that are always anonymised in integration output.
     pub anonymous: String = s("/etc/thugsred/anonymous.conf"),
+    /// Upstream SMS providers (optional file).
+    pub providers: String = s("/etc/thugsred/providers.conf"),
 }}
 
 config_struct! {
@@ -394,6 +396,38 @@ pub struct IntegrationDef {
 }}
 
 config_struct! {
+/// An upstream SMS provider reached over HTTPS: an additional outbound route
+/// that can present an approved sender name instead of a SIM's number.
+pub struct ProviderDef {
+    pub name: String = String::new(),
+    #[serde(rename = "type")]
+    pub kind: String = s("gatewayapi"),
+    pub enabled: bool = false,
+    pub api_token: String = String::new(),
+    /// GatewayAPI platform: "com" (global) or "eu".
+    pub region: String = s("com"),
+    /// Overrides the API base URL derived from `region`.
+    pub base_url: String = String::new(),
+    /// Sender used when a request does not name one.
+    pub default_sender: String = String::new(),
+    /// Further senders callers may request; `*` accepts any well-formed sender.
+    pub allowed_senders: Vec<String> = Vec::new(),
+    /// "normal" or "urgent" (the provider may charge more for urgent).
+    pub priority: String = s("normal"),
+    /// Optional label for the provider's own statistics.
+    pub label: String = String::new(),
+    pub timeout_seconds: u64 = 15,
+    /// Messages per minute handed to the provider (0 = unlimited).
+    pub rate_limit_per_minute: u32 = 60,
+    /// Spending protection in SMS segments (0 = unlimited).
+    pub daily_sms_limit: u64 = 0,
+    pub monthly_sms_limit: u64 = 0,
+    /// Shared secret that signs the provider's status callbacks. Callbacks
+    /// are rejected while this is empty.
+    pub callback_secret: String = String::new(),
+}}
+
+config_struct! {
 pub struct RoutingRule {
     pub name: String = String::new(),
     pub enabled: bool = true,
@@ -448,6 +482,7 @@ pub struct Config {
     pub metrics: Metrics,
     pub security: Security,
     pub sims: Vec<SimProfile>,
+    pub providers: Vec<ProviderDef>,
     pub integration: Vec<IntegrationDef>,
     pub routing: Vec<RoutingRule>,
     pub automation: Vec<AutomationRule>,
@@ -467,6 +502,7 @@ pub struct ConfigFiles {
     pub integrations: String,
     pub addressbook: String,
     pub anonymous: String,
+    pub providers: String,
 }
 
 impl Config {
@@ -509,6 +545,10 @@ impl Config {
                 crate::utils::list_matches(p, number)
                     || (!p.ends_with('*') && crate::utils::numbers_match(p, number))
             })
+    }
+    /// An enabled SMS provider by name.
+    pub fn provider(&self, name: &str) -> Option<&ProviderDef> {
+        self.providers.iter().find(|p| p.enabled && p.name == name)
     }
     pub fn integration_def(&self, name: &str) -> Option<&IntegrationDef> {
         self.integration.iter().find(|i| i.name == name)

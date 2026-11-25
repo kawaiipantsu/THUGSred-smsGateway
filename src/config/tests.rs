@@ -8,8 +8,11 @@ impl Dir {
         let d = tempfile::tempdir().unwrap();
         let p = d.path();
         let main = format!(
-            "{main}\n[paths]\nsim_config = \"{}\"\n[integrations]\nconfig_file = \"{}\"\n",
+            "{main}\n[paths]\nsim_config = \"{}\"\naddressbook = \"{}\"\nanonymous = \"{}\"\nproviders = \"{}\"\n[integrations]\nconfig_file = \"{}\"\n",
             p.join("sim.conf").display(),
+            p.join("addressbook.conf").display(),
+            p.join("anonymous.conf").display(),
+            p.join("providers.conf").display(),
             p.join("integrations.conf").display()
         );
         fs::write(p.join("smsgateway.conf"), main).unwrap();
@@ -327,4 +330,40 @@ fn env_file_next_to_config_resolves_references() {
     assert!(!serde_json::to_string(&cfg.redacted())
         .unwrap()
         .contains("secretpw123"));
+}
+
+#[test]
+fn providers_file() {
+    let d = Dir::new("", "", "");
+    let p = d.0.path().join("providers.conf");
+    let write = |text: &str| {
+        fs::write(&p, text).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&p, fs::Permissions::from_mode(0o600)).unwrap();
+    };
+    write("[[provider]]\nname = \"gw\"\nenabled = true\napi_token = \"secret-token-value\"\ndefault_sender = \"Example\"\ncallback_secret = \"cb\"\ndaily_sms_limit = 5\n");
+    let cfg = d.load().unwrap();
+    assert!(cfg.warnings.is_empty(), "{:?}", cfg.warnings);
+    assert_eq!(cfg.provider("gw").unwrap().region, "com");
+    let shown = cfg.redacted().to_string();
+    assert!(!shown.contains("secret-token-value") && !shown.contains("\"cb\""));
+
+    // A disabled provider needs nothing; an enabled one needs a token and a sender.
+    write("[[provider]]\nname = \"gw\"\n");
+    assert!(d.load().unwrap().provider("gw").is_none());
+    write("[[provider]]\nname = \"gw\"\nenabled = true\nregion = \"mars\"\ndefault_sender = \"way too long a name\"\n[[provider]]\nname = \"gw\"\n");
+    let err = d.load().unwrap_err().to_string();
+    for needle in [
+        "api_token",
+        "region",
+        "default_sender",
+        "duplicate provider name",
+    ] {
+        assert!(err.contains(needle), "{needle} missing in {err}");
+    }
+    assert!(valid_sender_name("Example 1").is_ok());
+    assert!(valid_sender_name("4500000000").is_ok());
+    for bad in ["ab", "Twelve chars", "Bad!", " pad", "1234567890123456", ""] {
+        assert!(valid_sender_name(bad).is_err(), "{bad}");
+    }
 }

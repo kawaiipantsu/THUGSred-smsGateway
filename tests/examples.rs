@@ -12,11 +12,12 @@ fn load_examples() -> Config {
         ("integrations.conf.example", "integrations.conf"),
         ("addressbook.conf.example", "addressbook.conf"),
         ("anonymous.conf.example", "anonymous.conf"),
+        ("providers.conf.example", "providers.conf"),
     ] {
         std::fs::copy(src.join(from), dir.path().join(to)).unwrap();
     }
     use std::os::unix::fs::PermissionsExt;
-    for f in ["sim.conf", "anonymous.conf"] {
+    for f in ["sim.conf", "anonymous.conf", "providers.conf"] {
         std::fs::set_permissions(dir.path().join(f), std::fs::Permissions::from_mode(0o640))
             .unwrap();
     }
@@ -27,6 +28,7 @@ fn load_examples() -> Config {
         format!("paths.sim_config={}", p("sim.conf")),
         format!("paths.addressbook={}", p("addressbook.conf")),
         format!("paths.anonymous={}", p("anonymous.conf")),
+        format!("paths.providers={}", p("providers.conf")),
         format!("integrations.config_file={}", p("integrations.conf")),
     ];
     config::load(&o).unwrap_or_else(|e| panic!("{e}"))

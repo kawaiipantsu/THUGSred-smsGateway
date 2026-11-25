@@ -327,6 +327,23 @@ fn ops() -> Vec<Op> {
         ),
         op(
             "get",
+            "/api/v1/providers",
+            "Providers",
+            "Configured SMS providers, allowed senders and usage. Send through one with `provider` and/or `sender_name` on /api/v1/sms/send",
+        ),
+        Op {
+            body: Some(
+                r#"{"event_id": "01EXAMPLE", "timestamp": "2030-01-01T09:00:00Z", "event_type": "message.status.sms", "event": {"msg_id": "01EXAMPLE", "recipient": 4500000000, "reference": "<gateway message id>", "status": "DELIVERED", "status_at": "2030-01-01T09:00:00Z", "error": null}}"#,
+            ),
+            ..op(
+                "post",
+                "/api/v1/providers/{name}/callback",
+                "Providers",
+                "Delivery status webhook called by the provider. Authenticated only by its `Signature: v1=<HMAC-SHA256 of the body>` header; exempt from address and token checks",
+            )
+        },
+        op(
+            "get",
             "/api/v1/integrations",
             "Integrations",
             "Configured integrations, routing rules and delivery statistics",
